@@ -123,7 +123,9 @@ function node_cmd {
     fi
   fi
   if [[ "$CSL_RTS" != "" ]] && [[ $i -eq 0 ]]; then
-    rts_opts="+RTS -N -pa -A6G -qg -RTS"
+    rts_opts="+RTS -N -s -h -p -pa -A6G -qg -RTS"
+  else
+    rts_opts="+RTS -N -s -h -p -RTS"
   fi
 
   echo -n "$(find_binary cardano-node) --db-path $run_dir/node-db$i $rts_opts  $reb --vss-genesis $i"
