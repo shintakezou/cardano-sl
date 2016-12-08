@@ -4,7 +4,7 @@
 -- | Tx processing related workers.
 
 module Pos.Worker.Tx
-       ( txWorkers
+       ( txWorkers, txsTransmitter
        ) where
 
 import           Control.Lens              ((%~), _1)

@@ -46,6 +46,7 @@ import           Pos.Types               (Block, SlotId, Tx (..), TxId, TxWitnes
                                           normalizeTxs, slotIdF, verifyAndApplyTxs,
                                           verifyTxUtxo)
 import           Pos.Util                (clearLRU)
+import           Debug.Trace             (traceEvent)
 
 -- | Transaction-related state part, includes transactions, utxo and
 -- auxiliary structures needed for transaction processing.
@@ -146,8 +147,10 @@ processTx :: (WithHash Tx, TxWitness) -> Update ProcessTxRes
 processTx txw = do
     localSetSize <- use txLocalTxsSize
     if localSetSize < maxLocalTxs
-        then processTxDo txw
-        else pure PTRoverwhelmed
+        then do () <- pure (traceEvent "processTx : not overwhelmed, processing now" ())
+                processTxDo txw
+        else do () <- pure (traceEvent "processTx : overwhelmed!" ())
+                pure PTRoverwhelmed
 
 processTxDo :: (WithHash Tx, TxWitness) -> Update ProcessTxRes
 processTxDo txw@(tx,w) =
@@ -156,9 +159,12 @@ processTxDo txw@(tx,w) =
         VerSuccess -> do
             txLocalTxs %= HM.insert tx w
             txLocalTxsSize += 1
+            currentSize <- use txLocalTxsSize
+            () <- pure (traceEvent ("processTxDo : added local tx, new size is " ++ show currentSize) ())
             applyTx tx
             pure PTRadded
-        VerFailure errors ->
+        VerFailure errors -> do
+            () <- pure (traceEvent "processTxDo : ignoring invalid tx" ())
             pure (mkPTRinvalid errors)
   where
     isKnown = orM
@@ -185,6 +191,9 @@ removeLocalTx tx = do
     when present $ do
         txLocalTxs %= HM.delete tx
         txLocalTxsSize -= 1
+        currentSize <- use txLocalTxsSize
+        () <- pure (traceEvent ("removeLocalTx : new size is " ++ show currentSize) ())
+        pure ()
 
 -- | Insert transaction which is in block into filter cache.
 cacheTx :: TxId -> Update ()

@@ -5,6 +5,7 @@ module Pos.Ssc.Class.Workers
        ( SscWorkersClass(..)
        ) where
 
+import           Data.String         (String)
 import           Data.Tagged         (Tagged)
 
 import           Pos.Ssc.Class.Types (Ssc (..))
@@ -15,4 +16,4 @@ class Ssc ssc => SscWorkersClass ssc where
     -- | All workers specific to SSC.
     -- Exceptions:
     -- 1. Worker which ticks when new slot starts.
-    sscWorkers :: WorkMode ssc m => Tagged ssc [m ()]
+    sscWorkers :: WorkMode ssc m => Tagged ssc [(String, m ())]

@@ -7,7 +7,7 @@ module Pos.Worker
        , statsWorkers
        ) where
 
-import           Control.TimeWarp.Timed (fork_, ms)
+import           Control.TimeWarp.Timed (fork_, forkLabeled_, ms)
 import           Data.Tagged            (untag)
 import           Formatting             (sformat, (%))
 import           System.Wlog            (logDebug, logInfo, logNotice)
@@ -20,19 +20,19 @@ import           Pos.Slotting           (onNewSlot)
 import           Pos.Ssc.Class.Workers  (SscWorkersClass, sscWorkers)
 import           Pos.Types              (SlotId, flattenSlotId, slotIdF)
 import           Pos.Util               (waitRandomInterval)
-import           Pos.Worker.Block       (blkOnNewSlot, blkWorkers)
+import           Pos.Worker.Block       (blkOnNewSlot, blocksTransmitter)
 import           Pos.Worker.Stats       (statsWorkers)
-import           Pos.Worker.Tx          (txWorkers)
+import           Pos.Worker.Tx          (txsTransmitter)
 import           Pos.WorkMode           (NodeContext (..), WorkMode, getNodeContext)
 
 -- | Run all necessary workers in separate threads. This call doesn't
 -- block.
 runWorkers :: (SscWorkersClass ssc,  WorkMode ssc m) => m ()
-runWorkers = mapM_ fork_ $ concat
-    [ [onNewSlotWorker]
-    , blkWorkers
-    , untag sscWorkers
-    , txWorkers
+runWorkers = sequence_ $ concat
+    [ [forkLabeled_ "onNewSlotWorker" onNewSlotWorker]
+    , [forkLabeled_ "blkTransmitter" blocksTransmitter]
+    , fmap (uncurry forkLabeled_) (untag sscWorkers)
+    , [forkLabeled_ "txsTransmitter" txsTransmitter]
     ]
 
 onNewSlotWorker :: WorkMode ssc m => m ()

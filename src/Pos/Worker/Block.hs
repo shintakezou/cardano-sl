@@ -9,6 +9,7 @@
 module Pos.Worker.Block
        ( blkOnNewSlot
        , blkWorkers
+       , blocksTransmitter
        ) where
 
 import           Control.Lens              (ix, (^.), (^?))

@@ -36,7 +36,8 @@ import           Control.TimeWarp.Rpc            (BinaryP (..), Binding (..),
                                                   NetworkAddress, RawData (..),
                                                   TransferException (..), hoistRespCond,
                                                   listenR, sendH, sendR)
-import           Control.TimeWarp.Timed          (MonadTimed, ThreadId, fork, killThread,
+import           Control.TimeWarp.Timed          (MonadTimed, ThreadId, fork,
+                                                  forkLabeled, killThread,
                                                   ms, sec)
 
 import           Data.Binary                     (Binary, decodeOrFail, encode)
@@ -67,6 +68,7 @@ import           Pos.DHT                         (DHTData, DHTException (..), DH
                                                   joinNetworkNoThrow, randomDHTKey,
                                                   withDhtLogger)
 import           Pos.Util                        (runWithRandomIntervals)
+import           Debug.Trace                     (traceEvent, traceEventIO)
 
 toBSBinary :: Binary b => b -> BS.ByteString
 toBSBinary = toStrict . encode
@@ -193,10 +195,11 @@ runKademliaDHT kdc@(KademliaDHTConfig {..}) action =
       logDebug "running kademlia dht messager"
       joinNetworkNoThrow (kdiInitialPeers $ kdcDHTInstance)
       startRejoinThread
-      action
+      t <- action
+      pure t
     startRejoinThread = do
       tvar <- KademliaDHT $ asks kdcAuxClosers
-      tid <- fork $ runWithRandomIntervals (ms 500) (sec 5) rejoinNetwork
+      tid <- forkLabeled "Kademlia DHT rejoin thread" $ runWithRandomIntervals (ms 500) (sec 5) rejoinNetwork
       atomically $ modifyTVar tvar (killThread tid:)
     startMsgThread = do
       (tvar, listenByBinding) <-
@@ -278,7 +281,9 @@ startDHT KademliaDHTConfig {..} = do
     convert' handler = getDHTResponseT . handler
 
 -- | Return 'True' if the message should be processed, 'False' if only
--- broadcasted
+--   broadcasted.
+--
+--   Also, broadcast any message not yet seen to the rest of the network.
 rawListener
     :: ( MonadBaseControl IO m
        , MonadMask m
@@ -292,17 +297,21 @@ rawListener
     -> TVar Bool
     -> (DHTMsgHeader, RawData)
     -> DHTResponseT (KademliaDHT m) Bool
-rawListener enableBroadcast cache kdcStopped (h, rawData@(RawData raw)) = withDhtLogger $ do
+rawListener enableBroadcast cache kdcStopped (h, rawData@(RawData raw)) = {-# SCC rawListener #-} withDhtLogger $ do
     isStopped <- atomically $ readTVar kdcStopped
     when isStopped $ do
         closeResponse
         throwM $ FatalError "KademliaDHT stopped"
     let mHash = hash raw
-    ignoreMsg <- case h of
-                   SimpleHeader True -> return False
-                   _                 -> atomically $ updCache cache mHash
+    (ignoreMsg, cacheSize) <- case h of
+      SimpleHeader True -> atomically $ do
+                             c <- readTVar cache
+                             pure (False, LRU.size c)
+      _                 -> atomically $ updCache cache mHash
+    () <- pure (traceEvent ("rawListener : cache size is " ++ show cacheSize) ())
+    () <- logInfo $ sformat ("rawListener : cache size is " % int) cacheSize
     if ignoreMsg
-       then logDebug $
+       then logInfo $
                 sformat ("Ignoring message " % shown % ", hash=" % int) h mHash
        else return ()
 
@@ -311,7 +320,7 @@ rawListener enableBroadcast cache kdcStopped (h, rawData@(RawData raw)) = withDh
     when (not ignoreMsg && enableBroadcast) $
         case h of
             BroadcastHeader -> do
-              logDebug $
+              logInfo $
                 sformat ("Broadcasting message " % shown % ", hash=" % int) h mHash
               lift $ sendToNetworkR rawData
             SimpleHeader _  -> pure ()
@@ -319,13 +328,20 @@ rawListener enableBroadcast cache kdcStopped (h, rawData@(RawData raw)) = withDh
     -- simply broadcast it)
     return (not ignoreMsg)
 
-updCache :: TVar (LRU.LRU Int ()) -> Int -> STM Bool
+-- | Update the cache with a hash, giving the new size of the cache, along
+--   with a Bool to indicate whether the item was added (False if it was already
+--   there).
+updCache :: TVar (LRU.LRU Int ()) -> Int -> STM (Bool, Int)
 updCache cacheTV dataHash = do
     cache <- readTVar cacheTV
     let (cache', mP) = dataHash `LRU.lookup` cache
     case mP of
-      Just _ -> writeTVar cacheTV cache' >> pure True
-      _      -> writeTVar cacheTV (LRU.insert dataHash () cache') >> pure False
+      Just _ -> do
+        () <- writeTVar cacheTV cache'
+        pure (True, LRU.size cache')
+      _      -> do
+        () <- writeTVar cacheTV (LRU.insert dataHash () cache')
+        pure (False, LRU.size cache')
 
 sendToNetworkR
     :: ( MonadBaseControl IO m

@@ -129,7 +129,6 @@ runSupporterReal inst bp = runServiceMode inst bp [] $ do
 ----------------------------------------------------------------------------
 
 -- | RawRealMode runner.
-{-# INLINE runRawRealMode #-}
 runRawRealMode
     :: forall ssc c.
        SscConstraint ssc

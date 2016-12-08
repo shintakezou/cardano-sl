@@ -23,6 +23,7 @@ import           Pos.State                 (ProcessTxRes (..), processTx)
 import           Pos.Statistics            (StatProcessTx (..), statlogCountEvent)
 import           Pos.Types                 (Tx, TxWitness, topsortTxs', txwF)
 import           Pos.WorkMode              (WorkMode)
+import           Debug.Trace               (traceEvent)
 
 -- | Listeners for requests related to blocks processing.
 txListeners :: (MonadDialog BinaryP m, WorkMode ssc m)
@@ -38,6 +39,7 @@ handleTxDo
     :: ResponseMode ssc m
     => (WithHash Tx, TxWitness) -> m Bool
 handleTxDo (tx, w) = do
+    () <- pure (traceEvent "START handleTxDo" ())
     res <- processTx (tx, w)
     let txw = (whData tx, w)
     case res of
@@ -52,6 +54,7 @@ handleTxDo (tx, w) = do
             logDebug $ sformat ("Transaction is already known: "%txwF) txw
         PTRoverwhelmed ->
             logInfo $ sformat ("Node is overwhelmed, can't add tx: "%txwF) txw
+    () <- pure (traceEvent "STOP handleTxDo" ())
     return (res == PTRadded)
 
 handleTxs

@@ -72,8 +72,8 @@ import           Pos.WorkMode                           (WorkMode, getNodeContex
                                                          ncSscContext)
 
 instance SscWorkersClass SscGodTossing where
-    sscWorkers = Tagged [ onStart
-                        , onNewSlotSsc
+    sscWorkers = Tagged [ ("godTossingOnStart", onStart)
+                        , ("godTossingOnNewSlotSsc", onNewSlotSsc)
                         ]
 
 onStart :: forall m. WorkMode SscGodTossing m => m ()
