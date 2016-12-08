@@ -308,8 +308,6 @@ rawListener enableBroadcast cache kdcStopped (h, rawData@(RawData raw)) = {-# SC
                              c <- readTVar cache
                              pure (False, LRU.size c)
       _                 -> atomically $ updCache cache mHash
-    () <- pure (traceEvent ("rawListener : cache size is " ++ show cacheSize) ())
-    () <- logInfo $ sformat ("rawListener : cache size is " % int) cacheSize
     if ignoreMsg
        then logInfo $
                 sformat ("Ignoring message " % shown % ", hash=" % int) h mHash

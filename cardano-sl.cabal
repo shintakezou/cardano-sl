@@ -266,8 +266,8 @@ executable cardano-node
                        -fno-warn-orphans
                        -with-rtsopts=-N
                        -O2
+                       -prof
                        -fprof-auto
-                       -eventlog
                        -fno-full-laziness
   default-extensions:   DeriveDataTypeable
                         DeriveGeneric

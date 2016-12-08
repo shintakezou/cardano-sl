@@ -11,7 +11,7 @@ module Pos.Communication.Methods
        ) where
 
 import           Control.TimeWarp.Rpc    (Message, NetworkAddress)
-import           Control.TimeWarp.Timed  (fork_)
+import           Control.TimeWarp.Timed  (fork_, forkLabeled_)
 import           Data.Binary             (Binary)
 import           Data.List.NonEmpty      (NonEmpty ((:|)))
 import           Formatting              (bprint, build, sformat, (%))
@@ -31,7 +31,7 @@ sendToNeighborsSafe :: (Binary r, Message r, WorkMode ssc m) => r -> m ()
 sendToNeighborsSafe msg = do
     let msgName = messageName' msg
     let action = () <$ sendToNeighbors msg
-    fork_ $
+    forkLabeled_ "sendToNeighborsSafe" $
         logWarningWaitLinear 10 ("Sending " <> msgName <> " to neighbors") action
 
 -- | Announce new block to all known peers. Intended to be used when
