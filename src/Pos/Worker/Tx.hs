@@ -10,9 +10,9 @@ module Pos.Worker.Tx
 import           Control.Lens              ((%~), _1)
 import           Control.TimeWarp.Timed    (Microsecond, repeatForever)
 import qualified Data.HashMap.Strict       as HM
-import           Formatting                (build, sformat, (%))
+import           Formatting                (build, sformat, (%), int)
 import           Serokell.Util.Exceptions  ()
-import           System.Wlog               (logWarning)
+import           System.Wlog               (logWarning, logInfo)
 import           Universum
 
 import           Pos.Communication.Methods (announceTxs)
@@ -32,9 +32,11 @@ txsTransmitterInterval = slotDuration
 
 txsTransmitter :: WorkMode ssc m => m ()
 txsTransmitter =
-    repeatForever txsTransmitterInterval onError $
-    do localTxs <- getLocalTxs
-       announceTxs . map (_1 %~ whData) . HM.toList $ localTxs
+    repeatForever txsTransmitterInterval onError $ do
+        localTxs <- getLocalTxs
+        logInfo (sformat ("WORKER : txsTransmitter announcing " % int % " local Txs") (HM.size localTxs))
+        announceTxs . map (_1 %~ whData) . HM.toList $ localTxs
+        pure ()
   where
     onError e =
         txsTransmitterInterval <$

@@ -112,8 +112,11 @@ blocksTransmitter =
     repeatForever blocksTransmitterInterval onError $
     do headBlock <- getHeadBlock
        case headBlock of
-           Left _          -> logDebug "Head block is genesis block ⇒ no announcement"
-           Right mainBlock -> announceBlock (mainBlock ^. gbHeader)
+           Left _          -> do
+               logInfo "WORKER : head block is genesis block ⇒ no announcement"
+           Right mainBlock -> do
+               logInfo "WORKER : announcing block"
+               announceBlock (mainBlock ^. gbHeader)
   where
     onError e =
         blocksTransmitterInterval <$

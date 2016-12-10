@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 {-# LANGUAGE ViewPatterns          #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 
 {-| Implementation of peer discovery using using Kademlia Distributed Hash Table.
     For more details regarding DHT see this package on hackage:
@@ -22,14 +23,18 @@ module Pos.DHT.Real
        , stopDHTInstance
        ) where
 
-import           Control.Concurrent.Async.Lifted (async, mapConcurrently)
+import           Control.Concurrent.Async.Lifted (async, mapConcurrently, race)
 import           Control.Concurrent.STM          (STM, TVar, modifyTVar, newTVar,
                                                   readTVar, swapTVar, writeTVar)
 import           Control.Monad.Catch             (Handler (..), MonadCatch, MonadMask,
                                                   MonadThrow, catchAll, catches, throwM)
 import           Control.Monad.Morph             (hoist)
 import           Control.Monad.Trans.Class       (MonadTrans)
-import           Control.Monad.Trans.Control     (MonadBaseControl)
+import           Control.Monad.Trans.Control     (MonadBaseControl(..), ComposeSt,
+                                                  defaultLiftBaseWith, defaultRestoreM,
+                                                  MonadTransControl(..), defaultLiftWith,
+                                                  defaultRestoreT)
+import           Control.Monad.Base              (MonadBase(..))
 import           Control.TimeWarp.Rpc            (BinaryP (..), Binding (..),
                                                   ListenerH (..), MonadDialog,
                                                   MonadResponse (..), MonadTransfer (..),
@@ -53,7 +58,7 @@ import qualified Network.Kademlia                as K
 import           System.Wlog                     (CanLog, HasLoggerName, WithLogger,
                                                   getLoggerName, logDebug, logError,
                                                   logInfo, logWarning, usingLoggerName)
-import           Universum                       hiding (async, fromStrict,
+import           Universum                       hiding (async, fromStrict, race,
                                                   mapConcurrently, toStrict)
 
 import           Pos.DHT                         (DHTData, DHTException (..), DHTKey,
@@ -134,15 +139,18 @@ instance MonadResponse m => MonadResponse (KademliaDHT m) where
     closeR = lift closeR
     peerAddr = lift peerAddr
 
---instance MonadTransControl KademliaDHT where
---    type StT KademliaDHT a = StT (ReaderT (KademliaDHTContext m)) a
---    liftWith = defaultLiftWith KademliaDHT unKademliaDHT
---    restoreT = defaultRestoreT KademliaDHT
---
---instance MonadBaseControl IO m => MonadBaseControl IO (KademliaDHT m) where
---    type StM (KademliaDHT m) a = ComposeSt KademliaDHT m a
---    liftBaseWith     = defaultLiftBaseWith
---    restoreM         = defaultRestoreM
+instance MonadBase IO m => MonadBase IO (KademliaDHT m) where
+    liftBase = KademliaDHT . liftBase
+
+{-
+ - Can't give MonadTransControl IO KademliaDHT because its state type
+ - depends upon its monad parameter. Oh well. If we really want it, we could
+ - safely use unsafeCoerce I suppose.
+instance MonadBaseControl IO m => MonadBaseControl IO (KademliaDHT m) where
+    type StM (KademliaDHT m) a = ComposeSt KademliaDHT m a
+    liftBaseWith     = defaultLiftBaseWith
+    restoreM         = defaultRestoreM
+-}
 
 instance MonadTransfer m => MonadTransfer (KademliaDHT m) where
     sendRaw addr req = KademliaDHT $ sendRaw addr (hoist unKademliaDHT req)
@@ -363,6 +371,23 @@ sendToNetworkImpl sender msg = do
     logDebug "Sending message to network"
     void $ defaultSendToNeighbors seqConcurrentlyK (flip sender BroadcastHeader) msg
 
+-- [Note: blocked indefinitely exceptions]
+--
+-- 'seqConcurrentlyK' is how we parallelize a bunch of sends in
+-- 'sendToNeighbors'. In practice, each individual send will block on an 'STM'
+-- in order to determine when its data has indeed been carried off by some
+-- TCP socket, i.e. when the peer has actually read the data. If GHC determines
+-- that this will block indefinitely, it won't raise the exception, because
+-- 'seqConcurrentlyK' retains references to the 'ThreadId' of the blocked
+-- thread, so it's possible that some other thread will 'throwTo' that id
+-- and unblock the thread!
+--
+-- Is this causing havoc? Let's find out.
+-- One option is to modify 'mapConcurrently' so that it holds only weak
+-- references to the 'ThreadId's of the threads it spawns. A less invasive
+-- alternative is to simply kill these threads after an arbitrary timeout.
+-- So that's what we'll do.
+--
 seqConcurrentlyK :: MonadBaseControl IO m => [KademliaDHT m a] -> KademliaDHT m [a]
 seqConcurrentlyK = KademliaDHT . mapConcurrently unKademliaDHT
 
@@ -375,9 +400,24 @@ instance ( MonadDialog BinaryP m
          ) => MonadMessageDHT (KademliaDHT m) where
     sendToNetwork = sendToNetworkImpl sendH
     sendToNeighbors = defaultSendToNeighbors seqConcurrentlyK sendToNode
-    sendToNode addr msg = do
-        defaultSendToNode addr msg
-        listenOutbound >>= updateClosers
+    -- A 'sendToNode' will timeout after 30 seconds.
+    -- This is achieved by racing it with a thread which just waits
+    -- 30 seconds and then stops.
+    sendToNode addr msg = KademliaDHT $ do
+        ctx <- ask
+        let worker :: m ()
+            worker = flip runReaderT ctx . unKademliaDHT $ do
+                defaultSendToNode addr msg
+                listenOutbound >>= updateClosers
+        let timeout :: m ()
+            timeout = do
+                liftIO . threadDelay $ 30000000
+                pure ()
+        choice <- lift $ race timeout worker
+        case choice of
+          Left killed -> do
+              logWarning $ sformat ("sendToNode : timed out after 30 seconds to destination " % shown) addr
+          Right ok -> pure ()
       where
         -- [CSL-4][TW-47]: temporary code, to refactor to subscriptions (after TW-47)
         listenOutboundDo = KademliaDHT (asks kdcListenByBinding) >>= ($ AtConnTo addr)

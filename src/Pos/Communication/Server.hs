@@ -26,15 +26,13 @@ import           Pos.WorkMode                      (WorkMode)
 -- | All listeners running on one node.
 allListeners :: (SscListenersClass ssc, MonadDialog BinaryP m, WorkMode ssc m)
              => [ListenerDHT m]
-allListeners = []
-{-
+allListeners =
     map (modifyListenerLogger serverLoggerName) $
     concat
         [ map (modifyListenerLogger "block") blockListeners
         , map (modifyListenerLogger "ssc") $ untag sscListeners
         , map (modifyListenerLogger "tx") txListeners
         ]
--}
 
 -- | Logger name for server.
 serverLoggerName :: LoggerName
