@@ -382,9 +382,11 @@ instance ( MonadDialog BinaryP m
         -- [CSL-4][TW-47]: temporary code, to refactor to subscriptions (after TW-47)
         listenOutboundDo = KademliaDHT (asks kdcListenByBinding) >>= ($ AtConnTo addr)
         listenOutbound = listenOutboundDo `catches` [Handler handleAL, Handler handleTE]
-        handleAL (AlreadyListeningOutbound _) = return $ pure ()
+        handleAL (AlreadyListeningOutbound _) = do
+            logWarning $ sformat ("Already listening on outbound connection to " % shown) addr
+            return $ pure ()
         handleTE e@(SomeException _) = do
-            logDebug $ sformat ("Error listening outbound connection to " %
+            logWarning $ sformat ("Error listening on outbound connection to " %
                                 shown % ": " % build) addr e
             return $ pure ()
         updateClosers closer = KademliaDHT (asks kdcAuxClosers)
