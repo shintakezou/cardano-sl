@@ -12,14 +12,15 @@ import           Control.Concurrent.Async.Lifted (forConcurrently)
 import           Control.Concurrent.STM.TVar     (modifyTVar', newTVarIO, readTVarIO)
 import           Control.TimeWarp.Rpc            (NetworkAddress)
 import           Control.TimeWarp.Timed          (Microsecond, for, fork_, ms, sec, wait)
+import           Control.Monad.Catch             (try, SomeException)
 import           Data.List                       ((!!))
 import           Data.Maybe                      (fromMaybe)
 import           Data.Time.Clock.POSIX           (getPOSIXTime)
-import           Formatting                      (float, int, sformat, (%))
+import           Formatting                      (float, int, sformat, (%), shown)
 import           Options.Applicative             (execParser)
 import           System.FilePath.Posix           ((</>))
 import           System.Random.Shuffle           (shuffleM)
-import           System.Wlog                     (logInfo)
+import           System.Wlog                     (logInfo, logError)
 import           Test.QuickCheck                 (arbitrary, generate)
 
 import           Pos.Constants                   (k, neighborsSendThreshold, slotDuration)
@@ -122,7 +123,7 @@ runSmartGen inst np@NodeParams{..} sscnp opts@GenOptions{..} =
         roundDurationSec = fromIntegral (goRoundPeriodRate + 1) *
                            fromIntegral (phaseDurationMs `div` sec 1)
 
-    void $ forFold (goInitTps, goTpsIncreaseStep) [1 .. goRoundNumber] $
+    out <- try $ void $ forFold (goInitTps, goTpsIncreaseStep) [1 .. goRoundNumber] $
         \(goTPS', increaseStep) (roundNum :: Int) -> do
         -- Start writing verifications file
         liftIO $ writeFile (logsFilePrefix </> verifyCsvFile roundNum) verifyCsvHeader
@@ -205,6 +206,16 @@ runSmartGen inst np@NodeParams{..} sscnp opts@GenOptions{..} =
         wait $ for phaseDurationMs
 
         return (newTPS, newStep)
+
+    case out of
+      Left (e :: SomeException) -> do
+          logError $ sformat ("runSmartGen : stopping with exception " % shown) e
+          throwM e
+      Right t -> do
+          logInfo $ sformat ("runSmartGen : stopping with no exception")
+          pure t
+
+
 
 -----------------------------------------------------------------------------
 -- Main

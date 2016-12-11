@@ -27,7 +27,8 @@ import           Control.Concurrent.Async.Lifted (async, mapConcurrently, race)
 import           Control.Concurrent.STM          (STM, TVar, modifyTVar, newTVar,
                                                   readTVar, swapTVar, writeTVar)
 import           Control.Monad.Catch             (Handler (..), MonadCatch, MonadMask,
-                                                  MonadThrow, catchAll, catches, throwM)
+                                                  MonadThrow, catchAll, catches, throwM,
+                                                  catch)
 import           Control.Monad.Morph             (hoist)
 import           Control.Monad.Trans.Class       (MonadTrans)
 import           Control.Monad.Trans.Control     (MonadBaseControl(..), ComposeSt,
@@ -182,7 +183,8 @@ type instance ThreadId (KademliaDHT m) = ThreadId m
 
 -- | Run 'KademliaDHT' with provided 'KademliaDTHConfig'.
 runKademliaDHT
-    :: ( WithLogger m
+    :: forall m a .
+       ( WithLogger m
        , MonadIO m
        , MonadTimed m
        , MonadDialog BinaryP m
@@ -195,16 +197,17 @@ runKademliaDHT kdc@(KademliaDHTConfig {..}) action =
   where
     action' =
         action''
+        `catch`
+        exceptionHandler
         `finally`
-        (logDebug "stopping kademlia messager"
-          >> stopDHT >> logDebug "kademlia messager stopped")
+        (logInfo "stopping kademlia messager"
+          >> stopDHT >> logInfo "kademlia messager stopped")
     action'' = do
       startMsgThread
       logDebug "running kademlia dht messager"
       joinNetworkNoThrow (kdiInitialPeers $ kdcDHTInstance)
       startRejoinThread
-      t <- action
-      pure t
+      action
     startRejoinThread = do
       tvar <- KademliaDHT $ asks kdcAuxClosers
       tid <- forkLabeled "Kademlia DHT rejoin thread" $ runWithRandomIntervals (ms 500) (sec 5) rejoinNetwork
@@ -214,6 +217,10 @@ runKademliaDHT kdc@(KademliaDHTConfig {..}) action =
           KademliaDHT $ (,) <$> asks kdcAuxClosers <*> asks kdcListenByBinding
       closer <- listenByBinding $ AtPort kdcPort
       atomically $ modifyTVar tvar (closer:)
+    exceptionHandler :: SomeException -> KademliaDHT m a
+    exceptionHandler e = do
+      logError $ sformat ("runKademliaDHT : stopping due to exception " % shown) e
+      throwM e
 
 -- | Stop DHT algo.
 stopDHT :: (MonadTimed m, MonadIO m) => KademliaDHT m ()
