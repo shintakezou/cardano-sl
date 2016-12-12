@@ -223,13 +223,16 @@ runKademliaDHT kdc@(KademliaDHTConfig {..}) action =
       throwM e
 
 -- | Stop DHT algo.
-stopDHT :: (MonadTimed m, MonadIO m) => KademliaDHT m ()
+stopDHT :: (MonadTimed m, MonadIO m, WithLogger m) => KademliaDHT m ()
 stopDHT = do
     (closersTV, stoppedTV) <- KademliaDHT $ (,)
             <$> asks kdcAuxClosers
             <*> asks kdcStopped
+    logInfo "stopDHT : writing stopped TVar"
     atomically $ writeTVar stoppedTV True
+    logInfo "stopDHT : taking closers TVar"
     closers <- atomically $ swapTVar closersTV []
+    logInfo $ sformat ("stopDHT : running " % int % " closers") (length closers)
     sequence_ closers
 
 -- | Stop chosen 'KademliaDHTInstance'.
@@ -436,8 +439,13 @@ instance ( MonadDialog BinaryP m
             logWarning $ sformat ("Error listening on outbound connection to " %
                                 shown % ": " % build) addr e
             return $ pure ()
-        updateClosers closer = KademliaDHT (asks kdcAuxClosers)
-                            >>= \tvar -> (atomically $ modifyTVar tvar (closer:))
+        updateClosers closer = do
+            tvar <- KademliaDHT (asks kdcAuxClosers)
+            closers <- atomically $ do
+                closers <- readTVar tvar
+                writeTVar tvar (closer : closers)
+                pure closers
+            logInfo $ sformat ("updateClosers : total number of closers is now " % int) (length closers)
 
 rejoinNetwork :: (MonadIO m, WithLogger m, MonadCatch m) => KademliaDHT m ()
 rejoinNetwork = withDhtLogger $ do
