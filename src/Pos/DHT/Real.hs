@@ -418,7 +418,9 @@ instance ( MonadDialog BinaryP m
         let worker :: m ()
             worker = flip runReaderT ctx . unKademliaDHT $ do
                 defaultSendToNode addr msg
-                listenOutbound >>= updateClosers
+                closer <- listenOutbound
+                pure ()
+                --listenOutbound >>= updateClosers
         let timeout :: m ()
             timeout = do
                 liftIO . threadDelay $ 30000000
@@ -471,9 +473,14 @@ instance (MonadIO m, MonadCatch m, WithLogger m) => MonadDHT (KademliaDHT m) whe
       handleRes _        = throwM AllPeersUnavailable
 
   discoverPeers type_ = do
+    oldPeerCount <- length <$> getKnownPeers
+    logInfo $ sformat ("KademliaDHT : discovering peers. Current total is " % int) oldPeerCount
     inst <- KademliaDHT $ asks (kdiHandle . kdcDHTInstance_)
     _ <- liftIO $ K.lookup inst =<< randomDHTKey type_
-    filterByNodeType type_ <$> getKnownPeers
+    peers <- getKnownPeers
+    let newPeerCount = length peers
+    logInfo $ sformat ("KademliaDHT : discovered peers. New total is " % int) newPeerCount
+    pure $ filterByNodeType type_ peers
 
   getKnownPeers = do
       myId <- currentNodeKey
