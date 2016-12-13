@@ -453,9 +453,10 @@ rejoinNetwork :: (MonadIO m, WithLogger m, MonadCatch m) => KademliaDHT m ()
 rejoinNetwork = withDhtLogger $ do
     peers <- getKnownPeers
     logInfo $ sformat ("rejoinNetwork: peers " % build) peers
-    when (null peers) $ logWarning "Empty known peer list"
-    init <- KademliaDHT $ asks (kdiInitialPeers . kdcDHTInstance_)
-    joinNetworkNoThrow init
+    when (null peers) $ do
+        logWarning "Empty known peer list. Rejoining."
+        init <- KademliaDHT $ asks (kdiInitialPeers . kdcDHTInstance_)
+        joinNetworkNoThrow init
 
 instance (MonadIO m, MonadCatch m, WithLogger m) => MonadDHT (KademliaDHT m) where
 
