@@ -452,22 +452,23 @@ instance ( MonadDialog BinaryP m
 rejoinNetwork :: (MonadIO m, WithLogger m, MonadCatch m) => KademliaDHT m ()
 rejoinNetwork = withDhtLogger $ do
     peers <- getKnownPeers
-    logDebug $ sformat ("rejoinNetwork: peers " % build) peers
-    when (null peers) $ do
-      logWarning "Empty known peer list"
-      init <- KademliaDHT $ asks (kdiInitialPeers . kdcDHTInstance_)
-      joinNetworkNoThrow init
+    logInfo $ sformat ("rejoinNetwork: peers " % build) peers
+    when (null peers) $ logWarning "Empty known peer list"
+    init <- KademliaDHT $ asks (kdiInitialPeers . kdcDHTInstance_)
+    joinNetworkNoThrow init
 
 instance (MonadIO m, MonadCatch m, WithLogger m) => MonadDHT (KademliaDHT m) where
 
   joinNetwork [] = throwM AllPeersUnavailable
   joinNetwork nodes = do
+      logInfo $ sformat ("KademliaDHT : joining Kademlia network using nodes " % shown) nodes
       inst <- KademliaDHT $ asks (kdiHandle . kdcDHTInstance_)
       loggerName <- getLoggerName
       asyncs <- mapM
           (liftIO . usingLoggerName loggerName . async . joinNetwork' inst)
           nodes
       waitAnyUnexceptional asyncs >>= handleRes
+      logInfo $ sformat ("KademliaDHT : joined Kademlia network using nodes " % shown) nodes
     where
       handleRes (Just _) = pure ()
       handleRes _        = throwM AllPeersUnavailable
