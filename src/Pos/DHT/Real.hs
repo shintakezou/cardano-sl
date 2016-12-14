@@ -418,7 +418,7 @@ instance ( MonadDialog BinaryP m
         let worker :: m ()
             worker = flip runReaderT ctx . unKademliaDHT $ do
                 defaultSendToNode addr msg
-                closer <- listenOutbound
+                --closer <- listenOutbound
                 pure ()
                 --listenOutbound >>= updateClosers
         let timeout :: m ()
@@ -432,6 +432,7 @@ instance ( MonadDialog BinaryP m
           Right ok -> pure ()
       where
         -- [CSL-4][TW-47]: temporary code, to refactor to subscriptions (after TW-47)
+        {-
         listenOutboundDo = KademliaDHT (asks kdcListenByBinding) >>= ($ AtConnTo addr)
         listenOutbound = listenOutboundDo `catches` [Handler handleAL, Handler handleTE]
         handleAL (AlreadyListeningOutbound _) = do
@@ -441,13 +442,7 @@ instance ( MonadDialog BinaryP m
             logWarning $ sformat ("Error listening on outbound connection to " %
                                 shown % ": " % build) addr e
             return $ pure ()
-        updateClosers closer = do
-            tvar <- KademliaDHT (asks kdcAuxClosers)
-            closers <- atomically $ do
-                closers <- readTVar tvar
-                writeTVar tvar (closer : closers)
-                pure closers
-            logInfo $ sformat ("updateClosers : total number of closers is now " % int) (length closers)
+            -}
 
 rejoinNetwork :: (MonadIO m, WithLogger m, MonadCatch m) => KademliaDHT m ()
 rejoinNetwork = withDhtLogger $ do
