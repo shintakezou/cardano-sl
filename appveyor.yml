@@ -19,8 +19,8 @@ before_test:
 - 7z x stack.zip stack.exe
 
 # Install rocksdb
-- git clone https://github.com/facebook/rocksdb.git --branch v4.13.5 || timeout /t 0
-- mkdir rocksdb\build || timeout /t 0
+- if not exist "rocksdb" git clone https://github.com/facebook/rocksdb.git --branch v4.13.5
+- if not exist "rocksdb\build" mkdir rocksdb\build 
 - cd rocksdb\build
 - cmake -G "Visual Studio 14 2015 Win64" -DOPTDBG=1 -DXPRESS=1 ..
 - msbuild rocksdb.sln /p:Configuration=Release /m
@@ -42,6 +42,7 @@ test_script:
       --copy-bins
   - xcopy stack.exe installers
   - cd installers
+  - Echo %APPVEYOR_BUILD_VERSION% > version.txt
   - SET PATH=C:\Program Files\NSIS\;C:\Program Files (x86)\NSIS\;%PATH%
   - stack --no-terminal build -j 1 --exec windows-installer
   - cd ..
