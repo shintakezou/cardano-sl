@@ -8,15 +8,15 @@ writeNSIS :: IO ()
 writeNSIS = writeFile "cardano.nsi" $ nsis $ do
      name "Cardano"                  -- The name of the installer
      outFile "cardano-win64-installer-${version}.exe"           -- Where to produce the installer
-     installDir "$PROGRAMFILES/Cardano"   -- The default installation directory
-     installDirRegKey HKLM "Software/Cardano" "Install_Dir"
+     installDir "$APPDATA\\Cardano"   -- The default installation directory
+     installDirRegKey HKCU "Software/Cardano" "Install_Dir"
      requestExecutionLevel User       -- Request application privileges for Windows Vista
 
      page Directory                   -- Pick where to install
      page InstFiles                   -- Give a progress bar while installing
 
      section "" [Required] $ do
-         setEnvVarPrepend HKLM "PATH" "$INSTDIR"
+         setEnvVarPrepend HKCU "PATH" "$INSTDIR"
          setOutPath "$INSTDIR"        -- Where to install files in this section
          file [] "cardano-node.exe"
          file [] "rocksdb.dll"
