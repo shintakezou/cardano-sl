@@ -7,7 +7,7 @@ module Main where
 
 import           Control.Monad.Reader   (MonadReader (..), ReaderT, asks, runReaderT)
 import           Control.TimeWarp.Rpc   (NetworkAddress)
-import           Control.TimeWarp.Timed (for, wait)
+import           Control.TimeWarp.Timed (for, fork_, wait)
 import           Data.List              ((!!))
 import qualified Data.Text              as T
 import           Formatting             (build, int, sformat, stext, (%))
@@ -26,7 +26,8 @@ import           Pos.Launcher           (BaseParams (..), LoggingParams (..),
 import           Pos.Ssc.SscAlgo        (SscAlgo (..))
 import           Pos.Types              (EpochIndex (..), coinF, makePubKeyAddress, txaF)
 import           Pos.Wallet             (WalletMode, WalletParams (..), WalletRealMode,
-                                         getBalance, runWalletReal, submitTx)
+                                         getBalance, runWallet, runWalletReal,
+                                         runWalletRealMode, submitTx)
 #ifdef WITH_WEB
 import           Pos.Wallet.Web         (walletServeWebLite)
 #endif
@@ -103,6 +104,7 @@ runWalletRepl wo = do
 
 runWalletCmd :: WalletMode ssc m => WalletOptions -> Text -> m ()
 runWalletCmd wo str = do
+    fork_ $ runWallet []
     na <- initialize wo
     let strs = T.splitOn "," str
     flip runReaderT (genesisSecretKeys, na) $ forM_ strs $ \scmd -> do
@@ -150,13 +152,15 @@ main = do
 
             plugins :: [WalletRealMode ()]
             plugins = case woAction of
-                Repl          -> [runWalletRepl opts]
-                Cmd cmd       -> [runWalletCmd opts cmd]
+                Repl  -> [runWalletRepl opts]
+                Cmd _ -> []
 #ifdef WITH_WEB
                 Serve webPort webDaedalusDbPath -> [walletServeWebLite webDaedalusDbPath False webPort]
 #endif
 
         case CLI.sscAlgo woCommonArgs of
             GodTossingAlgo -> putText "Using MPC coin tossing" *>
-                              runWalletReal inst params plugins
+                              case woAction of
+                                  Cmd cmd -> runWalletRealMode inst params $ runWalletCmd opts cmd
+                                  _       -> runWalletReal inst params plugins
             NistBeaconAlgo -> putText "Wallet does not support NIST beacon!"
