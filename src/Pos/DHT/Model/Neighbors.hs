@@ -7,8 +7,10 @@
 
 module Pos.DHT.Model.Neighbors
   ( sendToNeighbors
+  , sendToNodes
   , sendToNode
   , converseToNeighbors
+  , converseToNodes
   , converseToNode
   ) where
 
@@ -34,9 +36,19 @@ sendToNeighbors
     => SendActions packing m
     -> body
     -> m ()
-sendToNeighbors sendActions msg = do
-    nodes <- getNodesWithCheck
-    void $ forConcurrently nodes $ \node -> handleAll (logSendErr node) $ sendToNode sendActions (dhtAddr node) msg
+sendToNeighbors sendActions msg =
+    getNodesWithCheck >>= sendToNodes sendActions msg
+
+sendToNodes
+    :: ( MonadDHT m, MonadMockable m, Serializable packing body, WithLogger m, Message body )
+    => SendActions packing m
+    -> body
+    -> [DHTNode]
+    -> m ()
+sendToNodes sendActions msg nodes =
+    void $ forConcurrently nodes $ \node ->
+        handleAll (logSendErr node) $
+        sendToNode sendActions (dhtAddr node) msg
   where
     logSendErr node e = logWarning $ sformat ("Error sending to "%shown%": "%shown) node e
 
@@ -80,13 +92,23 @@ converseToNode sendActions addr handler =
             where
               peerId = addressToNodeId' i addr
 
+converseToNodes
+    :: ( MonadDHT m, MonadMockable m, WithLogger m, Unpackable packing rcv, Packable packing snd, Message snd )
+    => SendActions packing m
+    -> (NodeId -> ConversationActions snd rcv m -> m ())
+    -> [DHTNode]
+    -> m ()
+converseToNodes sendActions convHandler nodes =
+    void $ forConcurrently nodes $ \node ->
+        handleAll (logErr node) $
+        converseToNode sendActions (dhtAddr node) convHandler
+  where
+    logErr node e = logWarning $ sformat ("Error in conversation to "%shown%": "%shown) node e
+
 converseToNeighbors
     :: ( MonadDHT m, MonadMockable m, WithLogger m, Unpackable packing rcv, Packable packing snd, Message snd )
     => SendActions packing m
     -> (NodeId -> ConversationActions snd rcv m -> m ())
     -> m ()
-converseToNeighbors sendActions convHandler = do
-    nodes <- getNodesWithCheck
-    void $ forConcurrently nodes $ \node -> handleAll (logErr node) $ converseToNode sendActions (dhtAddr node) convHandler
-  where
-    logErr node e = logWarning $ sformat ("Error in conversation to "%shown%": "%shown) node e
+converseToNeighbors sendActions convHandler =
+    getNodesWithCheck >>= converseToNodes sendActions convHandler

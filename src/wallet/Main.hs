@@ -22,7 +22,7 @@ import           Pos.Constants        (slotDuration)
 import           Pos.Crypto           (SecretKey, createProxySecretKey, sign, toPublic)
 import           Pos.Data.Attributes  (mkAttributes)
 import           Pos.Delegation       (sendProxySKEpoch, sendProxySKSimple)
-import           Pos.DHT.Model        (dhtAddr, discoverPeers)
+import           Pos.DHT.Model        (DHTNode (..), dhtAddr, discoverPeers)
 import           Pos.Genesis          (genesisPublicKeys, genesisSecretKeys)
 import           Pos.Launcher         (BaseParams (..), LoggingParams (..),
                                        bracketResources, runTimeSlaveReal)
@@ -32,7 +32,6 @@ import           Pos.Ssc.SscAlgo      (SscAlgo (..))
 import           Pos.Types            (EpochIndex (..), coinF, makePubKeyAddress, txaF)
 import           Pos.Update           (UpdateProposal (..), UpdateVote (..),
                                        patakUpdateData)
-import           Pos.Util.TimeWarp    (NetworkAddress)
 import           Pos.Wallet           (WalletMode, WalletParams (..), WalletRealMode,
                                        getBalance, runWalletReal, submitTx,
                                        submitUpdateProposal, submitVote)
@@ -43,19 +42,19 @@ import           Pos.Wallet.Web       (walletServeWebLite)
 import           Command              (Command (..), parseCommand)
 import           WalletOptions        (WalletAction (..), WalletOptions (..), optsInfo)
 
-type CmdRunner = ReaderT ([SecretKey], [NetworkAddress])
+type CmdRunner = ReaderT [SecretKey]
 
 runCmd :: WalletMode ssc m => SendActions BiP m -> Command -> CmdRunner m ()
 runCmd _ (Balance addr) = lift (getBalance addr) >>=
-                         putText . sformat ("Current balance: "%coinF)
+                          putText . sformat ("Current balance: "%coinF)
 runCmd sendActions (Send idx outputs) = do
-    (skeys, na) <- ask
-    etx <- lift $ submitTx sendActions (skeys !! idx) na (map (,[]) outputs)
+    skeys <- ask
+    etx <- lift $ submitTx sendActions (skeys !! idx) (map (,[]) outputs)
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
 runCmd sendActions (Vote idx decision upid) = do
-    (skeys, na) <- ask
+    skeys <- ask
     let skey = skeys !! idx
     let voteUpd = UpdateVote
             { uvKey        = toPublic skey
@@ -63,13 +62,10 @@ runCmd sendActions (Vote idx decision upid) = do
             , uvDecision   = decision
             , uvSignature  = sign skey (upid, decision)
             }
-    if null na
-        then putText "Error: no addresses specified"
-        else do
-            lift $ submitVote sendActions na voteUpd
-            putText "Submitted vote"
+    lift $ submitVote sendActions voteUpd
+    putText "Submitted vote"
 runCmd sendActions (ProposeUpdate idx protocolVer scriptVer softwareVer) = do
-    (skeys, na) <- ask
+    skeys <- ask
     let skey = skeys !! idx
     let updateProposal = UpdateProposal
             { upProtocolVersion = protocolVer
@@ -78,11 +74,8 @@ runCmd sendActions (ProposeUpdate idx protocolVer scriptVer softwareVer) = do
             , upData            = patakUpdateData
             , upAttributes      = mkAttributes ()
             }
-    if null na
-        then putText "Error: no addresses specified"
-        else do
-            lift $ submitUpdateProposal sendActions skey na updateProposal
-            putText "Update proposal submitted"
+    lift $ submitUpdateProposal sendActions skey updateProposal
+    putText "Update proposal submitted"
 runCmd _ Help = do
     putText $
         unlines
@@ -103,7 +96,7 @@ runCmd _ Help = do
             , "   quit                           -- shutdown node wallet"
             ]
 runCmd _ ListAddresses = do
-    addrs <- map (makePubKeyAddress . toPublic) <$> asks fst
+    addrs <- map (makePubKeyAddress . toPublic) <$> ask
     putText "Available addrsses:"
     forM_ (zip [0 :: Int ..] addrs) $
         putText . uncurry (sformat $ "    #"%int%":   "%build)
@@ -137,24 +130,15 @@ evalCommands sa = do
         Left err  -> putStrLn err >> evalCommands sa
         Right cmd -> evalCmd sa cmd
 
-initialize :: WalletMode ssc m => WalletOptions -> m [NetworkAddress]
-initialize WalletOptions{..} = do
-    -- Wait some time to ensure blockchain is fetched
-    putText $ sformat ("Started node. Waiting for "%int%" slots...") woInitialPause
-    delay $ fromIntegral woInitialPause * slotDuration
-    fmap dhtAddr <$> discoverPeers
-
 runWalletRepl :: WalletMode ssc m => WalletOptions -> SendActions BiP m -> m ()
 runWalletRepl wo sa = do
-    na <- initialize wo
     putText "Welcome to Wallet CLI Node"
-    runReaderT (evalCmd sa Help) (genesisSecretKeys, na)
+    runReaderT (evalCmd sa Help) genesisSecretKeys
 
 runWalletCmd :: WalletMode ssc m => WalletOptions -> Text -> SendActions BiP m -> m ()
 runWalletCmd wo str sa = do
-    na <- initialize wo
     let strs = T.splitOn "," str
-    flip runReaderT (genesisSecretKeys, na) $ forM_ strs $ \scmd -> do
+    flip runReaderT genesisSecretKeys $ forM_ strs $ \scmd -> do
         let mcmd = parseCommand scmd
         case mcmd of
             Left err   -> putStrLn err

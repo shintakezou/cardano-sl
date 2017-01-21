@@ -36,19 +36,19 @@ import qualified Pos.DB.GState               as GS
 import           Pos.Delegation              (DelegationT (..))
 import           Pos.DHT.Model               (MonadDHT)
 import           Pos.DHT.Real                (KademliaDHT (..))
-import           Pos.Slotting                (MonadSlots, getCurrentSlot)
+import           Pos.Slotting                (getCurrentSlot)
 import           Pos.Ssc.Class.Types         (Ssc)
 import           Pos.Ssc.Extra               (SscHolder (..))
+import           Pos.Statistics              (NoStatsT (..), StatsT (..))
 import           Pos.Txp.Class               (getMemPool, getUtxoView)
 import qualified Pos.Txp.Holder              as Modern
 import           Pos.Txp.Logic               (processTx)
 import           Pos.Txp.Types               (UtxoView (..), localTxs)
 import           Pos.Types                   (Address, BlockHeader, ChainDifficulty, Coin,
-                                              SlotId (..), TxAux, TxId, Utxo, difficultyL,
-                                              epochIndexL, evalUtxoStateT,
-                                              flattenEpochOrSlot, flattenSlotId,
-                                              getEpochOrSlot, headerSlot, prevBlockL,
-                                              runUtxoStateT, sumCoins, toPair, txOutValue)
+                                              TxAux, TxId, Utxo, difficultyL,
+                                              evalUtxoStateT, flattenEpochOrSlot,
+                                              flattenSlotId, prevBlockL, runUtxoStateT,
+                                              sumCoins, toPair, txOutValue)
 import           Pos.Types.Coin              (unsafeIntegerToCoin)
 import           Pos.Types.Utxo.Functions    (belongsTo, filterUtxoByAddr)
 import           Pos.Update                  (USHolder (..))
@@ -79,6 +79,8 @@ instance MonadBalances m => MonadBalances (KademliaDHT m)
 instance MonadBalances m => MonadBalances (KeyStorage m)
 instance MonadBalances m => MonadBalances (PeerStateHolder ssc m)
 
+deriving instance MonadBalances m => MonadBalances (NoStatsT m)
+deriving instance MonadBalances m => MonadBalances (StatsT m)
 deriving instance MonadBalances m => MonadBalances (PC.ContextHolder ssc m)
 deriving instance MonadBalances m => MonadBalances (SscHolder ssc m)
 deriving instance MonadBalances m => MonadBalances (DelegationT m)
@@ -116,6 +118,8 @@ instance MonadTxHistory m => MonadTxHistory (KademliaDHT m)
 instance MonadTxHistory m => MonadTxHistory (KeyStorage m)
 instance MonadTxHistory m => MonadTxHistory (PeerStateHolder ssc m)
 
+deriving instance MonadTxHistory m => MonadTxHistory (NoStatsT m)
+deriving instance MonadTxHistory m => MonadTxHistory (StatsT m)
 deriving instance MonadTxHistory m => MonadTxHistory (PC.ContextHolder ssc m)
 deriving instance MonadTxHistory m => MonadTxHistory (SscHolder ssc m)
 deriving instance MonadTxHistory m => MonadTxHistory (DelegationT m)
@@ -186,6 +190,8 @@ instance MonadBlockchainInfo m => MonadBlockchainInfo (KademliaDHT m)
 instance MonadBlockchainInfo m => MonadBlockchainInfo (KeyStorage m)
 instance MonadBlockchainInfo m => MonadBlockchainInfo (PeerStateHolder ssc m)
 
+deriving instance MonadBlockchainInfo m => MonadBlockchainInfo (NoStatsT m)
+deriving instance MonadBlockchainInfo m => MonadBlockchainInfo (StatsT m)
 deriving instance MonadBlockchainInfo m => MonadBlockchainInfo (Modern.TxpLDHolder ssc m)
 deriving instance MonadBlockchainInfo m => MonadBlockchainInfo (SscHolder ssc m)
 deriving instance MonadBlockchainInfo m => MonadBlockchainInfo (DelegationT m)

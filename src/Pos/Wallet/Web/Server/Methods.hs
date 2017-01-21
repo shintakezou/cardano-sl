@@ -28,7 +28,6 @@ import           Universum
 
 import           Pos.Aeson.ClientTypes         ()
 import           Pos.Crypto                    (toPublic)
-import           Pos.DHT.Model                 (dhtAddr, getKnownPeers)
 import           Pos.Types                     (Address, ChainDifficulty, Coin,
                                                 TxOut (..), addressF, coinF,
                                                 decodeTextAddress, makePubKeyAddress,
@@ -234,8 +233,7 @@ sendExtended sendActions srcCAddr dstCAddr c curr title desc = do
     idx <- getAddrIdx srcAddr
     sks <- getSecretKeys
     let sk = sks !! idx
-    na <- fmap dhtAddr <$> getKnownPeers
-    etx <- submitTx sendActions sk na [(TxOut dstAddr c, [])]
+    etx <- submitTx sendActions sk [(TxOut dstAddr c, [])]
     case etx of
         Left err -> throwM . Internal $ sformat ("Cannot send transaction: "%stext) err
         Right (tx, _, _) -> do

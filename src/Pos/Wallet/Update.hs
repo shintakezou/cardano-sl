@@ -14,6 +14,7 @@ import           Pos.Binary                ()
 import           Pos.Communication.BiP     (BiP)
 import           Pos.Communication.Methods (sendUpdateProposal, sendVote)
 import           Pos.Crypto                (SecretKey, hash, sign, toPublic)
+import           Pos.DHT.Model             (dhtAddr, getKnownPeers)
 import           Pos.Update                (UpdateProposal, UpdateVote (..))
 import           Pos.WorkMode              (MinWorkMode)
 
@@ -21,10 +22,10 @@ import           Pos.WorkMode              (MinWorkMode)
 submitVote
     :: MinWorkMode m
     => SendActions BiP m
-    -> [NetworkAddress]
     -> UpdateVote
     -> m ()
-submitVote sendActions na voteUpd = do
+submitVote sendActions voteUpd = do
+    na <- fmap dhtAddr <$> getKnownPeers
     void $ forConcurrently na $
         \addr -> sendVote sendActions addr voteUpd
 
@@ -33,10 +34,9 @@ submitUpdateProposal
     :: MinWorkMode m
     => SendActions BiP m
     -> SecretKey
-    -> [NetworkAddress]
     -> UpdateProposal
     -> m ()
-submitUpdateProposal sendActions sk na prop = do
+submitUpdateProposal sendActions sk prop = do
     let upid = hash prop
     let initUpdVote = UpdateVote
             { uvKey        = toPublic sk
@@ -44,5 +44,6 @@ submitUpdateProposal sendActions sk na prop = do
             , uvDecision   = True
             , uvSignature  = sign sk (upid, True)
             }
+    na <- fmap dhtAddr <$> getKnownPeers
     void $ forConcurrently na $
         \addr -> sendUpdateProposal sendActions addr upid prop [initUpdVote]

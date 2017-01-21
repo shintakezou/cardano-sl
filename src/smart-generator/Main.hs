@@ -23,7 +23,7 @@ import           Pos.Communication           (BiP)
 import           Pos.Constants               (genesisN, neighborsSendThreshold,
                                               slotDuration, slotSecurityParam)
 import           Pos.Crypto                  (KeyPair (..), hash)
-import           Pos.DHT.Model               (MonadDHT, dhtAddr, discoverPeers,
+import           Pos.DHT.Model               (DHTNode, MonadDHT, dhtAddr, discoverPeers,
                                               getKnownPeers)
 import           Pos.Genesis                 (genesisUtxo)
 import           Pos.Launcher                (BaseParams (..), LoggingParams (..),
@@ -37,7 +37,7 @@ import           Pos.Ssc.NistBeacon          (SscNistBeacon)
 import           Pos.Ssc.SscAlgo             (SscAlgo (..))
 import           Pos.Types                   (TxAux)
 import           Pos.Util.JsonLog            ()
-import           Pos.Util.TimeWarp           (NetworkAddress, ms, sec)
+import           Pos.Util.TimeWarp           (ms, sec)
 import           Pos.Util.UserSecret         (simpleUserSecret)
 import           Pos.Wallet                  (submitTxRaw)
 import           Pos.WorkMode                (ProductionMode)
@@ -60,9 +60,9 @@ seedInitTx :: forall ssc . SscConstraint ssc
            -> TxAux
            -> ProductionMode ssc ()
 seedInitTx sendActions recipShare bp initTx = do
-    na <- getPeers recipShare
+    nodes <- getPeers recipShare
     logInfo "Issuing seed transaction"
-    submitTxRaw sendActions na initTx
+    submitTxRaw sendActions nodes initTx
     logInfo "Waiting for 1 slot before resending..."
     delay slotDuration
     -- If next tx is present in utxo, then everything is all right
@@ -77,9 +77,9 @@ chooseSubset share ls = take n ls
   where n = max 1 $ round $ share * fromIntegral (length ls)
 
 getPeers :: (MonadDHT m, MonadIO m)
-         => Double -> m [NetworkAddress]
+         => Double -> m [DHTNode]
 getPeers share = do
-    peers <- fmap dhtAddr <$> do
+    peers <- do
         ps <- getKnownPeers
         if length ps < neighborsSendThreshold
            then discoverPeers
