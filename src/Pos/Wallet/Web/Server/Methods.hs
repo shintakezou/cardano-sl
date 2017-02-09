@@ -35,10 +35,14 @@ import           Pos.Crypto                    (hash)
 import           Pos.Crypto                    (deterministicKeyGen, toPublic)
 import           Pos.DHT.Model                 (getKnownPeers)
 import           Pos.Slotting                  (getSlotDuration)
-import           Pos.Types                     (Address, ChainDifficulty (..), Coin,
+import           Pos.Types                     (Address, ApplicationName, BlockVersion,
+                                                ChainDifficulty (..), Coin,
+                                                NumSoftwareVersion, SoftwareVersion,
                                                 TxOut (..), addressF, coinF,
                                                 decodeTextAddress, makePubKeyAddress,
                                                 mkCoin)
+import           Pos.Types.Version             (ApplicationName (..), BlockVersion (..),
+                                                SoftwareVersion (..))
 import           Pos.Util                      (maybeThrow)
 import           Pos.Util.BackupPhrase         (BackupPhrase, keysFromPhrase)
 import           Pos.Wallet.KeyStorage         (KeyError (..), MonadKeys (..),
@@ -163,6 +167,7 @@ launchNotifier nat = void . liftIO $ mapM startForking
   where
     cooldownPeriod = 5000000         -- 5 sec
     cooldownPostponePeriod = 5000000 -- 5 sec
+    mockupUpdatePeriod = 10000000    -- 10 sec
     difficultyNotifyPeriod = 500000  -- 0.5 sec
     forkForever action = forkFinally action $ const $ do
         -- TODO: log error
@@ -186,9 +191,9 @@ launchNotifier nat = void . liftIO $ mapM startForking
         whenM ((localDifficulty /=) . spLocalCD <$> get) $ do
             lift $ notify $ LocalDifficultyChanged localDifficulty
             modify $ \sp -> sp { spLocalCD = localDifficulty }
-    updateNotifier = do
-        cps <- waitForUpdate
-        addUpdate $ toCUpdateInfo cps
+    updateNotifier = notifier mockupUpdatePeriod $
+        whenNothingM_ getPostponeUpdateUntil $
+            liftIO getPOSIXTime >>= setPostponeUpdateUntil
     updateNotifierUnPostpone = notifier cooldownPostponePeriod $ do
         mPostpone <- getPostponeUpdateUntil
         time <- liftIO getPOSIXTime
@@ -386,8 +391,16 @@ isValidAddress _ _       = pure False
 
 -- | Get last update info
 nextUpdate :: WalletWebMode ssc m => m CUpdateInfo
-nextUpdate = getNextUpdate >>=
-             maybeThrow (Internal "No updates available")
+nextUpdate = pure $
+    CUpdateInfo
+        (SoftwareVersion (ApplicationName "this is faked update") 0)
+        (BlockVersion 0 0 0)
+        0
+        False
+        0
+        0
+        (mkCoin 0)
+        (mkCoin 0)
 
 applyUpdate :: WalletWebMode ssc m => m ()
 applyUpdate = removeNextUpdate >> applyLastUpdate
