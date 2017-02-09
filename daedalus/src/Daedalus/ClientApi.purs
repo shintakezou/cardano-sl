@@ -150,6 +150,6 @@ systemVersion = fromAff $ map encodeJson B.systemVersion
 redeemADA :: forall eff . EffFn2 (ajax :: AJAX, crypto :: Crypto.CRYPTO | eff) String String (Promise Json)
 redeemADA = mkEffFn2 \seed -> fromAff <<< map encodeJson <<< B.redeemADA <<< mkCWalletRedeem seed
 
--- | Postpones updates until given date/time. Date/time is number of milliseconds until epoch time.
+-- | Postpones updates until given date/time. Date/time is number of seconds until epoch time.
 postponeUpdatesUntil :: forall eff. EffFn1 (ajax :: AJAX | eff) Number (Promise Unit)
 postponeUpdatesUntil = mkEffFn1 $ fromAff <<< B.postponeUpdatesUntil <<< mkTime
