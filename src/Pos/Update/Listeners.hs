@@ -15,8 +15,9 @@ import           Pos.Binary.Communication ()
 import           Pos.Binary.Relay         ()
 import           Pos.Communication.BiP    (BiP)
 import           Pos.Update.Types         (ProposalMsgTag (..), UpId, UpdateProposal (..))
-import           Pos.Util.Relay           (DataMsg, InvMsg, Relay (..), ReqMsg,
-                                           handleDataL, handleInvL, handleReqL)
+import           Pos.Util.Relay           (DataMsg, InvMsg, MempoolMsg, Relay (..),
+                                           ReqMsg, handleDataL, handleInvL,
+                                           handleMempoolL, handleReqL)
 import           Pos.WorkMode             (WorkMode)
 
 -- | Listeners for requests related to update system
@@ -26,6 +27,7 @@ usListeners
 usListeners =
     [ handleInvProposal
     , handleReqProposal
+    , handleMempoolProposal
     , handleDataProposal
     ]
 
@@ -37,6 +39,10 @@ handleReqProposal :: WorkMode ssc m => ListenerAction BiP m
 handleReqProposal = ListenerActionOneMsg $ \peerId sendActions (i :: ReqMsg UpId ProposalMsgTag) ->
     handleReqL i peerId sendActions
 
+handleMempoolProposal :: WorkMode ssc m => ListenerAction BiP m
+handleMempoolProposal = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg ProposalMsgTag) ->
+    handleMempoolL m peerId sendActions
+
 handleDataProposal :: WorkMode ssc m => ListenerAction BiP m
 handleDataProposal = ListenerActionOneMsg $ \peerId sendActions (i :: DataMsg UpId UpdateProposal) ->
     handleDataL i peerId sendActions
@@ -47,9 +53,11 @@ instance WorkMode ssc m =>
 
     verifyInvTag _ = pure VerSuccess
     verifyReqTag _ = pure VerSuccess
+    verifyMempoolTag _ = pure VerSuccess
     -- TODO: maybe somehow check that versions are not decreasing or whatevs?
     verifyDataContents UpdateProposal{..} = pure VerSuccess
 
     handleInv _ _ = notImplemented
     handleReq _ _ = notImplemented
     handleData _ _ = notImplemented
+    handleMempool _ = notImplemented

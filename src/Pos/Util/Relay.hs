@@ -7,15 +7,18 @@ module Pos.Util.Relay
        ( Relay (..)
        , InvMsg (..)
        , ReqMsg (..)
+       , MempoolMsg (..)
        , DataMsg (..)
        , DataMsgGodTossing (..)
        , handleInvL
        , handleReqL
+       , handleMempoolL
        , handleDataL
        ) where
 
 import qualified Data.ByteString.Char8            as BC
 import           Data.List.NonEmpty               (NonEmpty (..))
+import qualified Data.List.NonEmpty               as NE
 import           Data.Proxy                       (Proxy (..))
 import           Formatting                       (build, sformat, stext, (%))
 import           Node                             (NodeId (..), SendActions (..), sendTo)
@@ -59,6 +62,7 @@ class ( Buildable tag
 
     verifyInvTag :: tag -> m VerificationRes
     verifyReqTag :: tag -> m VerificationRes
+    verifyMempoolTag :: tag -> m VerificationRes
     verifyDataContents :: contents -> m VerificationRes
 
     -- | Handle inv msg and return whether it's useful or not
@@ -66,6 +70,9 @@ class ( Buildable tag
 
     -- | Handle req msg and return (Just data) in case requested data can be provided
     handleReq :: tag -> key -> m (Maybe contents)
+
+    -- | Handle mempool msg and return all keys we want to send
+    handleMempool :: tag -> m [key]
 
     -- | Handle data msg and return True if message is to be propagated
     handleData :: contents -> key -> m Bool
@@ -148,6 +155,22 @@ instance Arbitrary DataMsgGodTossing where
                            ]
         return $ DataMsg {..}
 
+data MempoolMsg tag = MempoolMsg
+    { mmTag  :: !tag
+    } deriving (Show,Eq)
+
+instance (Arbitrary tag) =>
+         Arbitrary (MempoolMsg tag) where
+    arbitrary = MempoolMsg <$> arbitrary
+
+instance (NamedMessagePart tag) =>
+         Message (MempoolMsg tag) where
+    messageName p = MessageName $ BC.pack "Mempool " <> encodeUtf8 (nMessageName $ tagM p)
+      where
+        tagM :: Proxy (MempoolMsg tag) -> Proxy tag
+        tagM _ = Proxy
+    formatMessage _ = "Mempool"
+
 processMessage
   :: (Buildable param, WithLogger m)
   => Text -> param -> (param -> m VerificationRes) -> m () -> m ()
@@ -204,6 +227,22 @@ handleReqL ReqMsg {..} peerId sendActions = processMessage "Request" rmTag verif
             ("No data "%build%" for addresses "%listJson)
             rmTag noDataAddrs
     mapM_ ((sendTo sendActions peerId) . uncurry DataMsg) datas
+
+handleMempoolL
+    :: forall m key tag contents.
+       ( Bi (InvMsg key tag)
+       , Relay m tag key contents
+       , WithLogger m
+       )
+    => MempoolMsg tag
+    -> NodeId
+    -> SendActions BiP m
+    -> m ()
+handleMempoolL MempoolMsg {..} peerId sendActions = processMessage "Mempool" mmTag verifyMempoolTag $ do
+    res <- handleMempool mmTag
+    case NE.nonEmpty res of
+        Nothing -> logDebug $ sformat ("Not replying to "%build) mmTag
+        Just ne -> sendTo sendActions peerId (InvMsg mmTag ne)
 
 handleDataL
     :: forall ssc m key tag contents.

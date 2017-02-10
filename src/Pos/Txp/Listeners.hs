@@ -29,8 +29,9 @@ import           Pos.Txp.Types.Communication (TxMsgContents (..), TxMsgTag (..))
 import           Pos.Txp.Types.Types         (MemPool (..), ProcessTxRes (..))
 import           Pos.Types                   (TxAux, TxId)
 import           Pos.Util                    (stubListenerOneMsg)
-import           Pos.Util.Relay              (DataMsg, InvMsg, Relay (..), ReqMsg,
-                                              handleDataL, handleInvL, handleReqL)
+import           Pos.Util.Relay              (DataMsg, InvMsg, MempoolMsg, Relay (..),
+                                              ReqMsg, handleDataL, handleInvL,
+                                              handleMempoolL, handleReqL)
 import           Pos.WorkMode                (WorkMode)
 
 txListeners
@@ -40,6 +41,7 @@ txListeners =
     [ handleInvTx
     , handleReqTx
     , handleDataTx
+    , handleMempoolTx
     ]
 
 handleInvTx
@@ -60,12 +62,19 @@ handleDataTx
 handleDataTx = ListenerActionOneMsg $ \peerId sendActions (d :: DataMsg TxId TxMsgContents) ->
     handleDataL d peerId sendActions
 
+handleMempoolTx
+    :: WorkMode ssc m
+    => ListenerAction BiP m
+handleMempoolTx = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg TxMsgTag) ->
+    handleMempoolL m peerId sendActions
+
 txStubListeners
     :: WithLogger m
     => Proxy ssc -> [ListenerAction BiP m]
 txStubListeners p =
     [ stubListenerOneMsg $ (const Proxy :: Proxy ssc -> Proxy (InvMsg TxId TxMsgTag)) p
     , stubListenerOneMsg $ (const Proxy :: Proxy ssc -> Proxy (ReqMsg TxId TxMsgTag)) p
+    , stubListenerOneMsg $ (const Proxy :: Proxy ssc -> Proxy (MempoolMsg TxMsgTag)) p
     , stubListenerOneMsg $
         (const Proxy :: Proxy ssc -> Proxy (DataMsg TxId TxMsgContents)) p
     ]
@@ -76,6 +85,7 @@ instance ( WorkMode ssc m
 
     verifyInvTag _ = pure VerSuccess
     verifyReqTag _ = pure VerSuccess
+    verifyMempoolTag _ = pure VerSuccess
     verifyDataContents _ = pure VerSuccess
 
     handleInv _ txId = not . HM.member txId  . localTxs <$> getMemPool
@@ -83,6 +93,8 @@ instance ( WorkMode ssc m
     handleReq _ txId = fmap toContents . HM.lookup txId . localTxs <$> getMemPool
       where
         toContents (tx, tw, td) = TxMsgContents tx tw td
+
+    handleMempool _ = HM.keys . localTxs <$> getMemPool
 
     handleData (TxMsgContents tx tw td) _ = handleTxDo (hash tx, (tx, tw, td))
 

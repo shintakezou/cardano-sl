@@ -39,8 +39,9 @@ import           Pos.Ssc.GodTossing.Types.Type          (SscGodTossing)
 import           Pos.Ssc.GodTossing.Types.Types         (GtPayload (..), _gpCertificates)
 import           Pos.Types                              (SlotId (..), StakeholderId)
 import           Pos.Util                               (stubListenerOneMsg)
-import           Pos.Util.Relay                         (DataMsg, InvMsg, Relay (..),
-                                                         ReqMsg, handleDataL, handleInvL,
+import           Pos.Util.Relay                         (DataMsg, InvMsg, MempoolMsg,
+                                                         Relay (..), ReqMsg, handleDataL,
+                                                         handleInvL, handleMempoolL,
                                                          handleReqL)
 import           Pos.WorkMode                           (WorkMode)
 
@@ -48,6 +49,7 @@ instance SscListenersClass SscGodTossing where
     sscListeners =
         Tagged [ handleInvGt
                , handleReqGt
+               , handleMempoolGt
                , handleDataGt
                ]
     sscStubListeners p =
@@ -55,6 +57,8 @@ instance SscListenersClass SscGodTossing where
             (const Proxy :: Proxy ssc -> Proxy (InvMsg StakeholderId GtMsgTag)) p
         , stubListenerOneMsg $
             (const Proxy :: Proxy ssc -> Proxy (ReqMsg StakeholderId GtMsgTag)) p
+        , stubListenerOneMsg $
+            (const Proxy :: Proxy ssc -> Proxy (MempoolMsg GtMsgTag)) p
         , stubListenerOneMsg $
             (const Proxy :: Proxy ssc -> Proxy (DataMsg StakeholderId GtMsgContents)) p
         ]
@@ -70,6 +74,12 @@ handleReqGt
     => ListenerAction BiP m
 handleReqGt = ListenerActionOneMsg $ \peerId sendActions (r :: ReqMsg StakeholderId GtMsgTag) ->
     handleReqL r peerId sendActions
+
+handleMempoolGt
+    :: WorkMode SscGodTossing m
+    => ListenerAction BiP m
+handleMempoolGt = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg GtMsgTag) ->
+    handleMempoolL m peerId sendActions
 
 handleDataGt
     :: WorkMode SscGodTossing m
@@ -89,6 +99,8 @@ instance WorkMode SscGodTossing m
 
     verifyReqTag _ = pure VerSuccess
 
+    verifyMempoolTag _ = pure VerSuccess
+
     verifyDataContents dat =
       ifM (isGoodSlotIdForTag (msgContentsTag dat) <$> getCurrentSlot)
           (pure VerSuccess)
@@ -100,6 +112,8 @@ instance WorkMode SscGodTossing m
       payload <- getCurrentSlot >>= sscGetLocalPayload
       return $ case payload of Nothing -> Nothing
                                Just p  -> toContents tag addr p
+
+    handleMempool _ = pure []
 
     handleData dat addr = do
         -- TODO: Add here malicious emulation for network addresses
