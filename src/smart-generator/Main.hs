@@ -55,7 +55,7 @@ import           TxAnalysis                  (checkWorker, createTxTimestamps,
                                               registerSentTx)
 import           TxGeneration                (BambooPool, MempoolStorage, addToMpStorage,
                                               createBambooPool, createMempoolStorage,
-                                              curBambooTx, initTransaction, isTxVerified,
+                                              curBambooTx, initTransaction, isValidTx,
                                               nextValidTx, resetBamboo)
 
 import           Util
@@ -63,12 +63,13 @@ import           Util
 
 -- | Resend initTx with `slotDuration` period until it's verified
 seedInitTx :: forall ssc . SscConstraint ssc
-           => SendActions BiP (ProductionMode ssc)
+           => Maybe MempoolStorage
+           -> SendActions BiP (ProductionMode ssc)
            -> Double
            -> BambooPool
            -> TxAux
            -> ProductionMode ssc ()
-seedInitTx sendActions recipShare bp initTx = do
+seedInitTx mms sendActions recipShare bp initTx = do
     na <- getPeers recipShare
     logInfo "Issuing seed transaction"
     submitTxRaw sendActions na initTx
@@ -76,10 +77,10 @@ seedInitTx sendActions recipShare bp initTx = do
     delay slotDuration
     -- If next tx is present in utxo, then everything is all right
     tx <- liftIO $ curBambooTx bp 1
-    isVer <- isTxVerified $ view _1 tx
+    isVer <- isValidTx mms $ view _1 tx
     if isVer
         then pure ()
-        else seedInitTx sendActions recipShare bp initTx
+        else seedInitTx mms sendActions recipShare bp initTx
 
 chooseSubset :: Double -> [a] -> [a]
 chooseSubset share ls = take n ls
@@ -165,7 +166,7 @@ runSmartGen mms res np@NodeParams{..} sscnp opts@GenOptions{..} =
     -- [CSL-220] Write MonadBaseControl instance for KademliaDHT
     -- Seeding init tx
     _ <- forConcurrently (zip bambooPools goGenesisIdxs) $ \(pool, fromIntegral -> idx) ->
-            seedInitTx sendActions goRecipientShare pool (initTx idx)
+            seedInitTx mms sendActions goRecipientShare pool (initTx idx)
 
     -- Start writing tps file
     liftIO $ writeFile (logsFilePrefix </> tpsCsvFile) tpsCsvHeader
