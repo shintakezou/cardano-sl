@@ -9,6 +9,7 @@ module TxGeneration
        , nextValidTx
        , resetBamboo
        , isTxVerified
+       , addToMpStorage
        ) where
 
 import           Control.Concurrent.STM.TArray (TArray)
@@ -133,6 +134,11 @@ type MempoolStorage = TVar (HashMap NetworkAddress (HashSet TxId))
 
 createMempoolStorage :: MonadIO m => [NetworkAddress] -> m MempoolStorage
 createMempoolStorage = atomically . newTVar . HM.fromList . map (,mempty)
+
+addToMpStorage :: MonadIO m => MempoolStorage -> NetworkAddress -> [TxId] -> m ()
+addToMpStorage ms na ids = atomically . modifyTVar' ms $ HM.alter inserter na
+  where inserter Nothing   = Just $ HS.fromList ids
+        inserter (Just hs) = Just $ hs `HS.union` HS.fromList ids
 
 ifMajorityHas :: MonadIO m => MempoolStorage -> Tx -> m Bool
 ifMajorityHas ms tx = do
