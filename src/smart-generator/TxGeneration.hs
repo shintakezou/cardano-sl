@@ -9,6 +9,7 @@ module TxGeneration
        , nextValidTx
        , resetBamboo
        , isTxVerified
+       , isValidTx
        , addToMpStorage
        ) where
 
