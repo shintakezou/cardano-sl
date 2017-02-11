@@ -24,7 +24,7 @@ import           Universum
 
 import           Pos.Aeson.Types     ()
 import           Pos.Crypto          (Hash, PublicKey, deterministicKeyGen, unsafeHash)
-import           Pos.Genesis         (genesisLeaders, genesisUtxo)
+import           Pos.Genesis         (genesisUtxo)
 import           Pos.Types           (EpochIndex, SharedSeed (..), SlotId (..),
                                       SlotLeaders)
 import           Pos.Web.Api         (baseNodeApi, gtNodeApi)
@@ -111,7 +111,7 @@ instance ToSample SlotId where
         ]
 
 instance ToSample SlotLeaders where
-    toSamples Proxy = singleSample $ genesisLeaders $ genesisUtxo def
+    toSamples Proxy = undefined -- singleSample $ genesisLeaders $ genesisUtxo def
 
 instance ToSample PublicKey where
     toSamples Proxy =

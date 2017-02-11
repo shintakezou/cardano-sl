@@ -91,7 +91,7 @@ runSmartGen :: forall ssc . SscConstraint ssc
             => RealModeResources -> NodeParams -> SscParams ssc -> GenOptions -> Production ()
 runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
   runProductionMode res np sscnp $ \sendActions -> do
-    initLrc
+    -- initLrc
     let getPosixMs = round . (*1000) <$> liftIO getPOSIXTime
         initTx = initTransaction opts
 

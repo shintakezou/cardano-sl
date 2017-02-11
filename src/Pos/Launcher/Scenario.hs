@@ -18,7 +18,8 @@ import           System.Wlog                 (logError, logInfo)
 import           Universum
 
 import           Pos.Communication           (BiP)
-import           Pos.Constants               (ntpMaxError, ntpResponseTimeout, isDevelopment)
+import           Pos.Constants               (isDevelopment, ntpMaxError,
+                                              ntpResponseTimeout)
 import           Pos.Context                 (NodeContext (..), getNodeContext,
                                               ncPubKeyAddress, ncPublicKey, readNtpMargin)
 import qualified Pos.DB.GState               as GS
@@ -49,7 +50,7 @@ runNode plugins sendActions = do
                        ", pk hash: "%build) pk addr pkHash
     () <$ fork waitForPeers
     initSemaphore
-    initLrc
+    -- initLrc
     _ <- fork ntpWorker -- start NTP worker for synchronization time
     logInfo $ "Waiting response from NTP servers"
     unless isDevelopment $ delay (ntpResponseTimeout + ntpMaxError)

@@ -24,7 +24,7 @@ import           Pos.Block.Logic             (createGenesisBlock, createMainBloc
 import           Pos.Block.Network.Announce  (announceBlock)
 import           Pos.Block.Network.Retrieval (retrievalWorker)
 import           Pos.Communication.BiP       (BiP)
-import           Pos.Constants               (networkDiameter)
+import           Pos.Constants               (epochSlots, networkDiameter)
 import           Pos.Context                 (getNodeContext, ncPublicKey)
 import           Pos.Crypto                  (ProxySecretKey (pskDelegatePk, pskIssuerPk, pskOmega))
 import           Pos.DB.GState               (getPSKByIssuerAddressHash)
@@ -44,7 +44,9 @@ import           Pos.WorkMode                (WorkMode)
 
 -- | All workers specific to block processing.
 blkWorkers :: (SscWorkersClass ssc, WorkMode ssc m) => [SendActions BiP m -> m ()]
-blkWorkers = [onNewSlot True . blkOnNewSlot, retrievalWorker]
+blkWorkers = [onNewSlot True . blkOnNewSlot
+            -- , retrievalWorker
+             ]
 
 -- Action which should be done when new slot starts.
 blkOnNewSlot :: WorkMode ssc m => SendActions BiP m -> SlotId -> m ()
@@ -60,7 +62,10 @@ blkOnNewSlot sendActions slotId@SlotId {..} = do
     -- genesis block for current epoch, then we either have calculated
     -- it before and it implies presense of leaders in MVar or we have
     -- read leaders from DB during initialization.
-    leadersMaybe <- getLeaders siEpoch
+    -- leadersMaybe <- getLeaders siEpoch
+    ourPk <- ncPublicKey <$> getNodeContext
+    let ourPkHash = addressHash ourPk
+    let leadersMaybe = Just (replicate epochSlots ourPkHash)
     case leadersMaybe of
         -- If we don't know leaders, we can't do anything.
         Nothing -> logWarning "Leaders are not known for new slot"

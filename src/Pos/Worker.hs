@@ -41,10 +41,10 @@ runWorkers :: (SscWorkersClass ssc, SecurityWorkersClass ssc, WorkMode ssc m) =>
 runWorkers sendActions = mapM_ fork $ map ($ withWaitLog sendActions) $ concat
     [ [ onNewSlotWorker ]
     , blkWorkers
-    , untag sscWorkers
-    , untag securityWorkers
-    , [lrcOnNewSlotWorker]
-    , usWorkers
+--    , untag sscWorkers
+--    , untag securityWorkers
+--    , [lrcOnNewSlotWorker]
+--    , usWorkers
     ]
 
 onNewSlotWorker :: WorkMode ssc m => SendActions BiP m -> m ()

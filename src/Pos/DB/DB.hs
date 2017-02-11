@@ -70,7 +70,7 @@ initNodeDBs = do
     prepareBlockDB genesisBlock0
     prepareGStateDB initialTip
     prepareGStateBlockExtra initialTip
-    prepareLrcDB
+    -- prepareLrcDB
     prepareMiscDB
 
 -- | Get block corresponding to tip.

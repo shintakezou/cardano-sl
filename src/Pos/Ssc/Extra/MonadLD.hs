@@ -18,6 +18,7 @@ import           Control.Concurrent.STM  (TVar, readTVar)
 import           Control.Monad.Except    (ExceptT)
 import           Control.Monad.Trans     (MonadTrans)
 import           Universum
+import           Unsafe.Coerce           (unsafeCoerce)
 
 import           Pos.DHT.Real            (KademliaDHT)
 import           Pos.Lrc.Types           (Richmen)
@@ -63,11 +64,12 @@ sscRunLocalUpdate
 sscRunLocalUpdate upd =
     modifyLocalData (\(_, l) -> runState upd l)
 
+-- :troll:
 sscGetLocalPayload
     :: forall ssc m.
        (MonadIO m, MonadSscLD ssc m, SscLocalDataClass ssc)
     => SlotId -> m (Maybe (SscPayload ssc))
-sscGetLocalPayload neededSlot = do
+sscGetLocalPayload neededSlot = return (Just (unsafeCoerce ())) {- do
     ldVar <- askSscLD
     atomically $ do
         ld <- readTVar ldVar
@@ -75,6 +77,7 @@ sscGetLocalPayload neededSlot = do
         if | slot == neededSlot -> return (Just payload)
            | slot < neededSlot -> retry
            | otherwise -> return Nothing
+-}
 
 sscApplyGlobalState
     :: forall ssc m.

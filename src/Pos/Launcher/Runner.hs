@@ -37,6 +37,7 @@ import           Control.Monad.Fix              (MonadFix)
 import qualified Data.ByteString.Char8          as BS8
 import           Data.Default                   (def)
 import           Data.List                      (nub)
+import qualified Data.List.NonEmpty             as NE
 import           Data.Proxy                     (Proxy (..))
 import qualified Data.Time                      as Time
 import           Formatting                     (build, sformat, shown, (%))
@@ -80,7 +81,6 @@ import           Pos.DHT.Real                   (KademliaDHTInstance,
                                                  KademliaDHTInstanceConfig (..),
                                                  runKademliaDHT, startDHTInstance,
                                                  stopDHTInstance)
-import           Pos.Genesis                    (genesisLeaders)
 import           Pos.Launcher.Param             (BaseParams (..), LoggingParams (..),
                                                  NodeParams (..))
 import           Pos.Ssc.Class                  (SscConstraint, SscNodeContext, SscParams,
@@ -90,8 +90,8 @@ import           Pos.Ssc.Extra                  (runSscHolder)
 import           Pos.Statistics                 (getNoStatsT, runStatsT')
 import           Pos.Txp.Holder                 (runTxpLDHolder)
 import qualified Pos.Txp.Types.UtxoView         as UV
-import           Pos.Types                      (Timestamp (Timestamp), timestampF,
-                                                 unflattenSlotId)
+import           Pos.Types                      (Timestamp (Timestamp), addressHash,
+                                                 timestampF, unflattenSlotId)
 import           Pos.Update.MemState            (runUSHolder)
 import           Pos.Util                       (runWithRandomIntervals,
                                                  stubListenerOneMsg)
@@ -265,7 +265,9 @@ runCH NodeParams {..} sscNodeContext act = do
             { ncSystemStart = npSystemStart
             , ncSecretKey = npSecretKey
             , ncGenesisUtxo = npCustomUtxo
-            , ncGenesisLeaders = genesisLeaders npCustomUtxo
+            , ncGenesisLeaders = NE.fromList $
+                 replicate Const.epochSlots
+                           (addressHash (toPublic npSecretKey))
             , ncTimeLord = npTimeLord
             , ncJLFile = jlFile
             , ncDbPath = npDbPathM

@@ -37,10 +37,11 @@ allListeners =
     map addWaitLogging $
     map (modifyListenerLogger serverLoggerName) $
     concat
-        [ map (modifyListenerLogger "block") blockListeners
-        , map (modifyListenerLogger "ssc") $ untag sscListeners
-        , map (modifyListenerLogger "tx") txListeners
-        , map (modifyListenerLogger "delegation") delegationListeners
+        [
+      --    map (modifyListenerLogger "block") blockListeners
+      --  , map (modifyListenerLogger "ssc") $ untag sscListeners
+          map (modifyListenerLogger "tx") txListeners
+      --  , map (modifyListenerLogger "delegation") delegationListeners
         , map (modifyListenerLogger "protocol") protocolListeners
         ]
   where

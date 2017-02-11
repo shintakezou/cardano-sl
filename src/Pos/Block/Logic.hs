@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns        #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -52,7 +53,7 @@ import           Pos.Constants             (blkSecurityParam, curProtocolVersion
                                             curSoftwareVersion, epochSlots,
                                             recoveryHeadersMessage, slotSecurityParam)
 import           Pos.Context               (NodeContext (ncSecretKey), getNodeContext,
-                                            lrcActionOnEpochReason)
+                                            lrcActionOnEpochReason, ncPublicKey)
 import           Pos.Crypto                (SecretKey, WithHash (WithHash), hash,
                                             shortHashF)
 import           Pos.Data.Attributes       (mkAttributes)
@@ -348,10 +349,10 @@ verifyBlocksPrefix blocks = runExceptT $ do
         Types.verifyBlocks (Just curSlot) (tipBlk <| blocks)
     verResToMonadError formatAllErrors =<< sscVerifyBlocks False blocks
     txUndo <- ExceptT $ txVerifyBlocks blocks
-    pskUndo <- ExceptT $ delegationVerifyBlocks blocks
-    when (length txUndo /= length pskUndo) $
-        throwError "Internal error of verifyBlocksPrefix: length of undos don't match"
-    pure $ NE.map (uncurry Undo) $ NE.zip txUndo pskUndo
+    -- pskUndo <- ExceptT $ delegationVerifyBlocks blocks
+    -- when (length txUndo /= length pskUndo) $
+    --     throwError "Internal error of verifyBlocksPrefix: length of undos don't match"
+    pure $ NE.map (flip Undo []) txUndo
 
 -- | Applies blocks if they're valid. Takes one boolean flag
 -- "rollback". Returns header hash of last applied block (new tip) on
@@ -487,9 +488,12 @@ createGenesisBlock
        WorkMode ssc m
     => EpochIndex -> m (Maybe (GenesisBlock ssc))
 createGenesisBlock epoch = do
-    leadersOrErr <-
-        try $
-        lrcActionOnEpochReason epoch "there are no leaders" LrcDB.getLeaders
+    ourPk <- ncPublicKey <$> getNodeContext
+    let ourPkHash = Types.addressHash ourPk
+    let leadersOrErr = Right (NE.fromList (replicate epochSlots ourPkHash))
+    -- leadersOrErr <-
+    --     try $
+    --     lrcActionOnEpochReason epoch "there are no leaders" LrcDB.getLeaders
     case leadersOrErr of
         Left UnknownBlocksForLrc ->
             Nothing <$ logInfo "createGenesisBlock: not enough blocks for LRC"
@@ -553,7 +557,9 @@ createMainBlock sId pSk = withBlkSemaphore createMainBlockDo
   where
     msgFmt = "We are trying to create main block, our tip header is\n"%build
     createMainBlockDo tip = do
+        logInfo "=== in createMainBlockDo"
         tipHeader <- DB.getTipBlockHeader
+        logInfo "=== after getTipBlockHeader"
         logInfo $ sformat msgFmt tipHeader
         case canCreateBlock sId tipHeader of
             Nothing  -> convertRes tip <$>
@@ -583,9 +589,13 @@ createMainBlockFinish
     -> BlockHeader ssc
     -> ExceptT Text m (MainBlock ssc)
 createMainBlockFinish slotId pSk prevHeader = do
+    !() <- traceM "=== in createMainBlockFinish"
     (localTxs, txUndo) <- getLocalTxsNUndo @ssc
+    !() <- traceM "=== got local txs"
     sscData <- maybe onNoSsc pure =<< sscGetLocalPayload @ssc slotId
+    !() <- traceM "=== got local payload"
     (localPSKs, pskUndo) <- lift getProxyMempool
+    !() <- traceM "=== got proxy mempool"
     let convertTx (txId, (tx, _, _)) = WithHash tx txId
     sortedTxs <- maybe onBrokenTopo pure $ topsortTxs convertTx localTxs
     sk <- ncSecretKey <$> getNodeContext
@@ -594,9 +604,11 @@ createMainBlockFinish slotId pSk prevHeader = do
             fromMaybe (panic "Undo for tx not found")
                       (HM.lookup (fst tx) txUndo) : undos
     let blockUndo = Undo (reverse $ foldl' prependToUndo [] localTxs) pskUndo
+    !() <- traceM "=== going to verify block"
     lift $ inAssertMode $ verifyBlocksPrefix (pure (Right blk)) >>=
         \case Left err -> logError $ sformat ("We've created bad block: "%stext) err
               Right _ -> pass
+    !() <- traceM "=== going to apply block"
     lift $ blk <$ applyBlocksUnsafe (pure (Right blk, blockUndo))
   where
     onBrokenTopo = throwError "Topology of local transactions is broken!"

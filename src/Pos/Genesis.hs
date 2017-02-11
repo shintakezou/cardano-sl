@@ -23,7 +23,7 @@ module Pos.Genesis
        , genesisDelegation
 
        -- * Ssc
-       , genesisLeaders
+       -- , genesisLeaders
 
        -- * Update System
        , genesisProtocolVersion
@@ -188,9 +188,11 @@ genesisDelegation = mempty
 genesisSeed :: SharedSeed
 genesisSeed = SharedSeed "vasa opasa skovoroda Ggurda boroda provoda"
 
+{-
 -- | Leaders of genesis. See 'followTheSatoshi'.
 genesisLeaders :: Utxo -> SlotLeaders
 genesisLeaders = followTheSatoshi genesisSeed
+-}
 
 ----------------------------------------------------------------------------
 -- Update system

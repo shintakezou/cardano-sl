@@ -62,14 +62,14 @@ applyBlocksUnsafe
 applyBlocksUnsafe blunds0 = do
     -- Note: it's important to put blocks first
     mapM_ putToDB blunds
-    delegateBatch <- SomeBatchOp <$> delegationApplyBlocks blocks
+    -- delegateBatch <- SomeBatchOp <$> delegationApplyBlocks blocks
     txBatch <- SomeBatchOp <$> txApplyBlocks blunds
     sscApplyBlocks blocks
     let epoch = blunds ^. _neLast . _1 . epochIndexL
-    richmen <-
-        lrcActionOnEpochReason epoch "couldn't get SSC richmen" DB.getRichmenSsc
-    sscApplyGlobalState richmen
-    GS.writeBatchGState [delegateBatch, txBatch, forwardLinksBatch, inMainBatch]
+    -- richmen <-
+    --    lrcActionOnEpochReason epoch "couldn't get SSC richmen" DB.getRichmenSsc
+    -- sscApplyGlobalState richmen
+    GS.writeBatchGState [{-delegateBatch,-} txBatch, forwardLinksBatch, inMainBatch]
     normalizeTxpLD
     DB.sanityCheckDB
   where
@@ -87,10 +87,10 @@ applyBlocksUnsafe blunds0 = do
 -- taken.  application is taken already.
 rollbackBlocksUnsafe :: (WorkMode ssc m) => NonEmpty (Blund ssc) -> m ()
 rollbackBlocksUnsafe toRollback = do
-    delRoll <- SomeBatchOp <$> delegationRollbackBlocks toRollback
+    -- delRoll <- SomeBatchOp <$> delegationRollbackBlocks toRollback
     txRoll <- SomeBatchOp <$> txRollbackBlocks toRollback
     sscRollback $ fmap fst toRollback
-    GS.writeBatchGState [delRoll, txRoll, forwardLinksBatch, inMainBatch]
+    GS.writeBatchGState [{-delRoll,-} txRoll, forwardLinksBatch, inMainBatch]
     DB.sanityCheckDB
     inAssertMode $
         when (isGenesis0 $ fst $ NE.last $ toRollback) $
