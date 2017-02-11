@@ -7,7 +7,7 @@ module GenOptions
 import           Data.Version        (showVersion)
 import           Options.Applicative (Parser, ParserInfo, auto, fullDesc, help, helper,
                                       info, long, many, metavar, option, optional,
-                                      progDesc, short, value)
+                                      progDesc, short, switch, value)
 import           Universum
 
 import           Paths_cardano_sl    (version)
@@ -30,6 +30,7 @@ data GenOptions = GenOptions
     , goJLFile          :: !(Maybe FilePath)
     , goCommonArgs      :: !CLI.CommonArgs -- ^ Common CLI arguments, including initial DHT nodes
     , goIpPort          :: !NetworkAddress         -- ^ DHT/Blockchain ip/port
+    , goMempoolCheck    :: !Bool       -- ^ Whether to check transactions against nodes mempool instead of blockchain
     }
 
 optionsParser :: Parser GenOptions
@@ -88,6 +89,8 @@ optionsParser = GenOptions
     <*> CLI.optionalJSONPath
     <*> CLI.commonArgsParser "Initial DHT peer (may be many)"
     <*> CLI.ipPortOption ("0.0.0.0", 24962)
+    <*> switch (long "mempool-validation" <>
+                help "Validate transactions against mempool instead of blockchain")
 
 optsInfo :: ParserInfo GenOptions
 optsInfo = info (helper <*> optionsParser) $

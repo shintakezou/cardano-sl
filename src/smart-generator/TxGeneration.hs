@@ -1,7 +1,9 @@
 module TxGeneration
        ( BambooPool
+       , MempoolStorage
        , initTransaction
        , createBambooPool
+       , createMempoolStorage
        , curBambooTx
        , peekTx
        , nextValidTx
@@ -14,6 +16,8 @@ import           Control.Concurrent.STM.TVar   (TVar, modifyTVar', newTVar, read
                                                 writeTVar)
 import           Control.Lens                  (view, _1)
 import           Data.Array.MArray             (newListArray, readArray, writeArray)
+import qualified Data.HashMap.Strict           as HM
+import qualified Data.HashSet                  as HS
 import           Data.List                     (tail, (!!))
 import           Universum                     hiding (head)
 
@@ -27,7 +31,7 @@ import           Pos.Script.Examples           (multisigValidator)
 import           Pos.Types                     (Tx (..), TxAux, TxId, TxOut (..),
                                                 makePubKeyAddress, makeScriptAddress,
                                                 mkCoin)
-import           Pos.Util.TimeWarp             (sec)
+import           Pos.Util.TimeWarp             (NetworkAddress, sec)
 import           Pos.Wallet                    (makeMOfNTx, makePubKeyTx)
 import           Pos.WorkMode                  (WorkMode)
 
@@ -125,15 +129,33 @@ peekTx bp = curBambooTx bp 0
 isTxVerified :: (WorkMode ssc m) => Tx -> m Bool
 isTxVerified tx = allM (fmap isJust . getTxOut) (txInputs tx)
 
+type MempoolStorage = TVar (HashMap NetworkAddress (HashSet TxId))
+
+createMempoolStorage :: MonadIO m => [NetworkAddress] -> m MempoolStorage
+createMempoolStorage = atomically . newTVar . HM.fromList . map (,mempty)
+
+ifMajorityHas :: MonadIO m => MempoolStorage -> Tx -> m Bool
+ifMajorityHas ms tx = do
+    let txid = hash tx
+    hm <- atomically $ readTVar ms
+    let hasHms = HM.filter (HS.member txid) hm
+        ratio = fromIntegral (HM.size hasHms) / fromIntegral (HM.size hm)
+    return $ ratio > 0.5
+
+isValidTx :: WorkMode ssc m => Maybe MempoolStorage -> Tx -> m Bool
+isValidTx Nothing   = isTxVerified
+isValidTx (Just ms) = ifMajorityHas ms
+
 nextValidTx
     :: WorkMode ssc m
     => BambooPool
+    -> Maybe MempoolStorage
     -> Double
     -> Int
     -> m (Either TxAux TxAux)
-nextValidTx bp curTps propThreshold = do
+nextValidTx bp mms curTps propThreshold = do
     curTx <- liftIO $ curBambooTx bp 1
-    isVer <- isTxVerified $ view _1 curTx
+    isVer <- isValidTx mms $ view _1 curTx
     liftIO $
         if isVer
         then do

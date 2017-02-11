@@ -25,7 +25,7 @@ import           Pos.Constants               (genesisN, neighborsSendThreshold,
                                               slotDuration, slotSecurityParam)
 import           Pos.Crypto                  (KeyPair (..), hash)
 import           Pos.DHT.Model               (DHTNodeType (..), MonadDHT, dhtAddr,
-                                              discoverPeers, getKnownPeers)
+                                              discoverPeers, getKnownPeers, sendToNode)
 import           Pos.Genesis                 (genesisUtxo)
 import           Pos.Launcher                (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), RealModeResources,
@@ -36,19 +36,22 @@ import           Pos.Ssc.Class               (SscConstraint, SscParams)
 import           Pos.Ssc.GodTossing          (GtParams (..), SscGodTossing)
 import           Pos.Ssc.NistBeacon          (SscNistBeacon)
 import           Pos.Ssc.SscAlgo             (SscAlgo (..))
+import           Pos.Txp.Types               (TxMsgTag (..))
 import           Pos.Types                   (TxAux)
 import           Pos.Util.JsonLog            ()
+import           Pos.Util.Relay              (MempoolMsg (..))
 import           Pos.Util.TimeWarp           (NetworkAddress, ms, sec)
 import           Pos.Util.UserSecret         (simpleUserSecret)
 import           Pos.Wallet                  (submitTxRaw)
-import           Pos.WorkMode                (ProductionMode)
+import           Pos.WorkMode                (ProductionMode, WorkMode)
 
 import           GenOptions                  (GenOptions (..), optsInfo)
 import           TxAnalysis                  (checkWorker, createTxTimestamps,
                                               registerSentTx)
-import           TxGeneration                (BambooPool, createBambooPool, curBambooTx,
-                                              initTransaction, isTxVerified, nextValidTx,
-                                              resetBamboo)
+import           TxGeneration                (BambooPool, MempoolStorage,
+                                              createBambooPool, createMempoolStorage,
+                                              curBambooTx, initTransaction, isTxVerified,
+                                              nextValidTx, resetBamboo)
 
 import           Util
 
@@ -87,6 +90,21 @@ getPeers share = do
            else return ps
     liftIO $ chooseSubset share <$> shuffleM peers
 
+mempoolPolling :: WorkMode ssc m => SendActions BiP m -> MempoolStorage -> m ()
+mempoolPolling sendActions ms = do
+    na <- getPeers 1
+    let msg = MempoolMsg TxMsgTag
+    forM_ na $ \addr -> sendToNode sendActions addr msg
+    delay $ sec 20
+
+initTxPool :: WorkMode ssc m => SendActions BiP m -> Bool -> m (Maybe MempoolStorage)
+initTxPool _ False = return Nothing
+initTxPool sendActions True = Just <$> do
+    na <- getPeers 1
+    ms <- createMempoolStorage na
+    void $ fork $ mempoolPolling sendActions ms
+    return ms
+
 runSmartGen :: forall ssc . SscConstraint ssc
             => RealModeResources -> NodeParams -> SscParams ssc -> GenOptions -> Production ()
 runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
@@ -97,6 +115,8 @@ runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
 
     bambooPools <- forM goGenesisIdxs $ \(fromIntegral -> i) ->
         liftIO $ createBambooPool goMOfNParams i $ initTx i
+
+    mTxPool <- initTxPool sendActions goMempoolCheck
 
     txTimestamps <- liftIO createTxTimestamps
 
@@ -158,7 +178,7 @@ runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
                       -- Get a random subset of neighbours to send tx
                       na <- getPeers goRecipientShare
 
-                      eTx <- nextValidTx bambooPool goTPS goPropThreshold
+                      eTx <- nextValidTx bambooPool mTxPool goTPS goPropThreshold
                       case eTx of
                           Left parent -> do
                               logInfo $ sformat ("Transaction #"%int%" is not verified yet!") idx

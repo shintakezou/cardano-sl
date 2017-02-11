@@ -87,6 +87,7 @@ library
                         Pos.Ssc.Extra
                         Pos.Statistics
                         Pos.Txp.Listeners
+                        Pos.Txp.Types
                         Pos.Types
                         Pos.Types.Address
                         Pos.Types.Arbitrary
@@ -267,7 +268,6 @@ library
                         Pos.Txp.Error
                         Pos.Txp.Holder
                         Pos.Txp.Logic
-                        Pos.Txp.Types
                         Pos.Txp.Types.Communication
                         Pos.Txp.Types.Types
                         Pos.Txp.Types.UtxoView

@@ -1,7 +1,8 @@
--- | Framework for Inv/Req/Dat message handling
 
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+
+-- | Framework for Inv/Req/Dat message handling
 
 module Pos.Util.Relay
        ( Relay (..)
