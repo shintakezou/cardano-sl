@@ -14,8 +14,8 @@ import           Pos.Types                        (TxId)
 import           Pos.Types.Address                (StakeholderId, addressHash)
 import           Pos.Update.Types                 (UpId, UpdateProposal)
 import           Pos.Util.Relay                   (DataMsg (..), DataMsgGodTossing (..),
-                                                   InvMsg (..), MempoolMsg (..),
-                                                   ReqMsg (..))
+                                                   InvMsg (..), MempoolInvMsg (..),
+                                                   MempoolMsg (..), ReqMsg (..))
 
 instance (Bi tag, Bi key) => Bi (InvMsg key tag) where
     put InvMsg {..} = put imTag >> put imKeys
@@ -28,6 +28,10 @@ instance (Bi tag, Bi key) => Bi (ReqMsg key tag) where
 instance (Bi tag) => Bi (MempoolMsg tag) where
     put MempoolMsg {..} = put mmTag
     get = liftM MempoolMsg get
+
+instance (Bi tag, Bi key) => Bi (MempoolInvMsg key tag) where
+    put MempoolInvMsg {..} = put mimTag >> put mimKeys
+    get = liftM2 MempoolInvMsg get get
 
 -- Sometimes we want another instances to exist
 --instance (Bi tag, Bi contents) => Bi (DataMsg key contents) where

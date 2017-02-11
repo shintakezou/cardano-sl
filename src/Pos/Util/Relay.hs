@@ -8,6 +8,7 @@ module Pos.Util.Relay
        , InvMsg (..)
        , ReqMsg (..)
        , MempoolMsg (..)
+       , MempoolInvMsg (..)
        , DataMsg (..)
        , DataMsgGodTossing (..)
        , handleInvL
@@ -157,7 +158,7 @@ instance Arbitrary DataMsgGodTossing where
 
 data MempoolMsg tag = MempoolMsg
     { mmTag  :: !tag
-    } deriving (Show,Eq)
+    } deriving (Show, Eq)
 
 instance (Arbitrary tag) =>
          Arbitrary (MempoolMsg tag) where
@@ -170,6 +171,22 @@ instance (NamedMessagePart tag) =>
         tagM :: Proxy (MempoolMsg tag) -> Proxy tag
         tagM _ = Proxy
     formatMessage _ = "Mempool"
+
+data MempoolInvMsg key tag = MempoolInvMsg
+    { mimTag  :: !tag
+    , mimKeys :: !(NonEmpty key)
+    } deriving (Show, Eq)
+
+instance (Arbitrary key, Arbitrary tag) => Arbitrary (MempoolInvMsg key tag) where
+    arbitrary = MempoolInvMsg <$> arbitrary <*> arbitrary
+
+instance (NamedMessagePart tag) =>
+         Message (MempoolInvMsg key tag) where
+    messageName p = MessageName $ BC.pack "MempoolInventory " <> encodeUtf8 (nMessageName $ tagM p)
+      where
+        tagM :: Proxy (MempoolInvMsg key tag) -> Proxy tag
+        tagM _ = Proxy
+    formatMessage _ = "MempoolInventory"
 
 processMessage
   :: (Buildable param, WithLogger m)
@@ -230,7 +247,7 @@ handleReqL ReqMsg {..} peerId sendActions = processMessage "Request" rmTag verif
 
 handleMempoolL
     :: forall m key tag contents.
-       ( Bi (InvMsg key tag)
+       ( Bi (MempoolInvMsg key tag)
        , Relay m tag key contents
        , WithLogger m
        )
@@ -242,7 +259,7 @@ handleMempoolL MempoolMsg {..} peerId sendActions = processMessage "Mempool" mmT
     res <- handleMempool mmTag
     case NE.nonEmpty res of
         Nothing -> logDebug $ sformat ("Not replying to "%build) mmTag
-        Just ne -> sendTo sendActions peerId (InvMsg mmTag ne)
+        Just ne -> sendTo sendActions peerId (MempoolInvMsg mmTag ne)
 
 handleDataL
     :: forall ssc m key tag contents.
