@@ -5,7 +5,8 @@ module Main where
 
 import           Control.Concurrent.STM.TVar (modifyTVar', newTVarIO, readTVarIO)
 import           Control.Lens                (view, _1)
-import           Data.Maybe                  (fromMaybe)
+import qualified Data.List.NonEmpty          as NA
+import           Data.Maybe                  (fromJust, fromMaybe)
 import           Data.Proxy                  (Proxy (..))
 import           Data.Time.Clock.POSIX       (getPOSIXTime)
 import           Data.Time.Units             (Microsecond)
@@ -27,7 +28,8 @@ import           Pos.Constants               (genesisN, neighborsSendThreshold,
                                               slotDuration, slotSecurityParam)
 import           Pos.Crypto                  (KeyPair (..), hash)
 import           Pos.DHT.Model               (DHTNodeType (..), MonadDHT, dhtAddr,
-                                              discoverPeers, getKnownPeers)
+                                              discoverPeers, getKnownPeers,
+                                              nodeIdToAddress, sendToNode)
 import           Pos.Genesis                 (genesisUtxo)
 import           Pos.Launcher                (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), RealModeResources,
@@ -51,9 +53,10 @@ import           Pos.WorkMode                (ProductionMode)
 import           GenOptions                  (GenOptions (..), optsInfo)
 import           TxAnalysis                  (checkWorker, createTxTimestamps,
                                               registerSentTx)
-import           TxGeneration                (BambooPool, createBambooPool, curBambooTx,
-                                              initTransaction, isTxVerified, nextValidTx,
-                                              resetBamboo)
+import           TxGeneration                (BambooPool, MempoolStorage, addToMpStorage,
+                                              createBambooPool, createMempoolStorage,
+                                              curBambooTx, initTransaction, isTxVerified,
+                                              nextValidTx, resetBamboo)
 
 import           Util
 
@@ -99,47 +102,50 @@ mempoolPolling sendActions ms = do
     forM_ na $ \addr -> sendToNode sendActions addr msg
     delay $ sec 20
 
-initTxPool :: WorkMode ssc m => SendActions BiP m -> Bool -> m (Maybe MempoolStorage)
-initTxPool _ False = return Nothing
-initTxPool sendActions True = Just <$> do
-    na <- getPeers 1
-    ms <- createMempoolStorage na
-    void $ fork $ mempoolPolling sendActions ms
-    return ms
-
-mempoolListener :: WorkMode ssc m => Listener BiP m
-mempoolListener = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
-    logInfo "stub!"
+mempoolListener :: WorkMode ssc m => MempoolStorage -> Listener BiP m
+mempoolListener ms = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
+    let na = fromJust $ nodeIdToAddress peerId
+    addToMpStorage ms na $ NA.toList $ mimKeys mi
 
 runSGMode
     :: forall ssc a .
        (SscConstraint ssc)
-    => RealModeResources
+    => Maybe MempoolStorage
+    -> RealModeResources
     -> NodeParams
     -> SscParams ssc
     -> (SendActions BiP (ProductionMode ssc) -> ProductionMode ssc a)
     -> Production a
-runSGMode res np@NodeParams {..} sscnp action =
+runSGMode mms res np@NodeParams {..} sscnp action =
     runRawRealMode res np sscnp listeners $
     \sendActions -> getNoStatsT . action $ hoistSendActions lift getNoStatsT sendActions
   where
-    listeners = hoistListenerAction getNoStatsT lift <$> mempoolListener : allListeners
+    listeners = hoistListenerAction getNoStatsT lift <$> allListeners ++ mempoolLs
+    mempoolLs = case mms of
+        Nothing -> []
+        Just ms -> [mempoolListener ms]
 
 runSmartGen
     :: forall ssc . SscConstraint ssc
-    => RealModeResources
+    => Maybe MempoolStorage
+    -> RealModeResources
     -> NodeParams
     -> SscParams ssc
     -> GenOptions
     -> Production ()
-runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
-  runSGMode res np sscnp $ \sendActions -> do
+runSmartGen mms res np@NodeParams{..} sscnp opts@GenOptions{..} =
+  runSGMode mms res np sscnp $ \sendActions -> do
     -- initLrc
     let getPosixMs = round . (*1000) <$> liftIO getPOSIXTime
         initTx = initTransaction opts
 
     bambooPools <- forM goGenesisIdxs $ \(fromIntegral -> i) ->
         liftIO $ createBambooPool goMOfNParams i $ initTx i
+
+    -- | Start mempool polling
+    case mms of
+        Nothing -> pure ()
+        Just ms -> void $ fork $ mempoolPolling sendActions ms
 
     txTimestamps <- liftIO createTxTimestamps
 
@@ -201,7 +207,7 @@ runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
                       -- Get a random subset of neighbours to send tx
                       na <- getPeers goRecipientShare
 
-                      eTx <- nextValidTx bambooPool goTPS goPropThreshold
+                      eTx <- nextValidTx bambooPool mms goTPS goPropThreshold
                       case eTx of
                           Left parent -> do
                               logInfo $ sformat ("Transaction #"%int%" is not verified yet!") idx
@@ -319,8 +325,12 @@ main = do
                 , gtpVssKeyPair = vssKeyPair
                 }
 
+        mms <- if goMempoolCheck
+               then Just <$> createMempoolStorage []
+               else return Nothing
+
         case CLI.sscAlgo goCommonArgs of
             GodTossingAlgo -> putText "Using MPC coin tossing" *>
-                              runSmartGen @SscGodTossing res params gtParams opts
+                              runSmartGen @SscGodTossing mms res params gtParams opts
             NistBeaconAlgo -> putText "Using NIST beacon" *>
-                              runSmartGen @SscNistBeacon res params () opts
+                              runSmartGen @SscNistBeacon mms res params () opts

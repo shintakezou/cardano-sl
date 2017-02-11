@@ -7,6 +7,7 @@ module TxGeneration
        , nextValidTx
        , resetBamboo
        , isTxVerified
+       , addToMpStorage
        ) where
 
 import           Control.Concurrent.STM.TArray (TArray)
@@ -124,6 +125,28 @@ peekTx bp = curBambooTx bp 0
 
 isTxVerified :: (WorkMode ssc m) => Tx -> m Bool
 isTxVerified tx = allM (fmap isJust . getTxOut) (txInputs tx)
+
+type MempoolStorage = TVar (HashMap NetworkAddress (HashSet TxId))
+
+createMempoolStorage :: MonadIO m => [NetworkAddress] -> m MempoolStorage
+createMempoolStorage = atomically . newTVar . HM.fromList . map (,mempty)
+
+addToMpStorage :: MonadIO m => MempoolStorage -> NetworkAddress -> [TxId] -> m ()
+addToMpStorage ms na ids = atomically . modifyTVar' ms $ HM.alter inserter na
+  where inserter Nothing   = Just $ HS.fromList ids
+        inserter (Just hs) = Just $ hs `HS.union` HS.fromList ids
+
+ifMajorityHas :: MonadIO m => MempoolStorage -> Tx -> m Bool
+ifMajorityHas ms tx = do
+    let txid = hash tx
+    hm <- atomically $ readTVar ms
+    let hasHms = HM.filter (HS.member txid) hm
+        ratio = fromIntegral (HM.size hasHms) / fromIntegral (HM.size hm)
+    return $ ratio > 0.5
+
+isValidTx :: WorkMode ssc m => Maybe MempoolStorage -> Tx -> m Bool
+isValidTx Nothing   = isTxVerified
+isValidTx (Just ms) = ifMajorityHas ms
 
 nextValidTx
     :: WorkMode ssc m
