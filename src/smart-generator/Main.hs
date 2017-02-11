@@ -11,8 +11,10 @@ import           Data.Time.Clock.POSIX       (getPOSIXTime)
 import           Data.Time.Units             (Microsecond)
 import           Formatting                  (float, int, sformat, (%))
 import           Mockable                    (Production, delay, forConcurrently, fork)
-import           Node                        (SendActions)
+import           Node                        (Listener, ListenerAction (..), SendActions,
+                                              hoistListenerAction, hoistSendActions)
 import           Options.Applicative         (execParser)
+import           Serokell.Util.Verify        (VerificationRes (..))
 import           System.FilePath.Posix       ((</>))
 import           System.Random.Shuffle       (shuffleM)
 import           System.Wlog                 (logInfo)
@@ -20,7 +22,7 @@ import           Test.QuickCheck             (arbitrary, generate)
 import           Universum                   hiding (forConcurrently)
 
 import qualified Pos.CLI                     as CLI
-import           Pos.Communication           (BiP)
+import           Pos.Communication           (BiP, allListeners)
 import           Pos.Constants               (genesisN, neighborsSendThreshold,
                                               slotDuration, slotSecurityParam)
 import           Pos.Crypto                  (KeyPair (..), hash)
@@ -30,16 +32,17 @@ import           Pos.Genesis                 (genesisUtxo)
 import           Pos.Launcher                (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), RealModeResources,
                                               bracketResources, initLrc, runNode,
-                                              runProductionMode, runTimeSlaveReal,
+                                              runRawRealMode, runTimeSlaveReal,
                                               stakesDistr)
 import           Pos.Ssc.Class               (SscConstraint, SscParams)
 import           Pos.Ssc.GodTossing          (GtParams (..), SscGodTossing)
 import           Pos.Ssc.NistBeacon          (SscNistBeacon)
 import           Pos.Ssc.SscAlgo             (SscAlgo (..))
+import           Pos.Statistics              (getNoStatsT)
 import           Pos.Txp.Types               (TxMsgTag (..))
-import           Pos.Types                   (TxAux)
+import           Pos.Types                   (TxAux, TxId)
 import           Pos.Util.JsonLog            ()
-import           Pos.Util.Relay              (MempoolMsg (..))
+import           Pos.Util.Relay              (MempoolInvMsg (..), MempoolMsg (..))
 import           Pos.Util.TimeWarp           (NetworkAddress, ms, sec)
 import           Pos.Util.UserSecret         (simpleUserSecret)
 import           Pos.Wallet                  (submitTxRaw)
@@ -105,10 +108,33 @@ initTxPool sendActions True = Just <$> do
     void $ fork $ mempoolPolling sendActions ms
     return ms
 
-runSmartGen :: forall ssc . SscConstraint ssc
-            => RealModeResources -> NodeParams -> SscParams ssc -> GenOptions -> Production ()
+mempoolListener :: WorkMode ssc m => Listener BiP m
+mempoolListener = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
+    logInfo "stub!"
+
+runSGMode
+    :: forall ssc a .
+       (SscConstraint ssc)
+    => RealModeResources
+    -> NodeParams
+    -> SscParams ssc
+    -> (SendActions BiP (ProductionMode ssc) -> ProductionMode ssc a)
+    -> Production a
+runSGMode res np@NodeParams {..} sscnp action =
+    runRawRealMode res np sscnp listeners $
+    \sendActions -> getNoStatsT . action $ hoistSendActions lift getNoStatsT sendActions
+  where
+    listeners = hoistListenerAction getNoStatsT lift <$> mempoolListener : allListeners
+
+runSmartGen
+    :: forall ssc . SscConstraint ssc
+    => RealModeResources
+    -> NodeParams
+    -> SscParams ssc
+    -> GenOptions
+    -> Production ()
 runSmartGen res np@NodeParams{..} sscnp opts@GenOptions{..} =
-  runProductionMode res np sscnp $ \sendActions -> do
+  runSGMode res np sscnp $ \sendActions -> do
     -- initLrc
     let getPosixMs = round . (*1000) <$> liftIO getPOSIXTime
         initTx = initTransaction opts
