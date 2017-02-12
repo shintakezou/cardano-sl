@@ -97,12 +97,12 @@ getPeers share = do
     liftIO $ chooseSubset share <$> shuffleM peers
 
 mempoolPolling :: WorkMode ssc m => SendActions BiP m -> MempoolStorage -> m ()
-mempoolPolling sendActions ms = do
+mempoolPolling sendActions ms = forever $ do
+    delay $ sec 10
     na <- getPeers 1
     let msg = MempoolMsg TxMsgTag
     logWarning (sformat ("sending MempoolMsg to "%int%" nodes") (length na))
     forM_ na $ \addr -> sendToNode sendActions addr msg
-    delay $ sec 20
 
 mempoolListener :: WorkMode ssc m => MempoolStorage -> Listener BiP m
 mempoolListener ms = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
