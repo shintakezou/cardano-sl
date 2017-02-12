@@ -48,7 +48,7 @@ import           Pos.Util.Relay              (MempoolInvMsg (..), MempoolMsg (..
 import           Pos.Util.TimeWarp           (NetworkAddress, ms, sec)
 import           Pos.Util.UserSecret         (simpleUserSecret)
 import           Pos.Wallet                  (submitTxRaw)
-import           Pos.WorkMode                (ProductionMode)
+import           Pos.WorkMode                (ProductionMode, WorkMode)
 
 import           GenOptions                  (GenOptions (..), optsInfo)
 import           TxAnalysis                  (checkWorker, createTxTimestamps,
