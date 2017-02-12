@@ -225,7 +225,7 @@ send sendActions srcCAddr dstCAddr c =
     sendExtended sendActions srcCAddr dstCAddr c ADA mempty mempty
 
 sendExtended :: WalletWebMode ssc m => SendActions BiP m -> CAddress -> CAddress -> Coin -> CCurrency -> Text -> Text -> m CTx
-sendExtended sendActions srcCAddr dstCAddr c curr title desc = do
+sendExtended sendActions srcCAddr dstCAddr c curr title desc = undefined {-do
     srcAddr <- decodeCAddressOrFail srcCAddr
     dstAddr <- decodeCAddressOrFail dstCAddr
     idx <- getAddrIdx srcAddr
@@ -243,6 +243,7 @@ sendExtended sendActions srcCAddr dstCAddr c curr title desc = do
             let txHash = hash tx
             () <$ addHistoryTx dstCAddr curr title desc (txHash, tx, False)
             addHistoryTx srcCAddr curr title desc (txHash, tx, True)
+-}
 
 getHistory :: WalletWebMode ssc m => CAddress -> m [CTx]
 getHistory cAddr = do

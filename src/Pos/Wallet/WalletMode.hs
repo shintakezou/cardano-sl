@@ -39,9 +39,9 @@ import           Pos.Txp.Class               (getMemPool, getUtxoView)
 import qualified Pos.Txp.Holder              as Modern
 import           Pos.Txp.Logic               (processTx)
 import           Pos.Txp.Types               (UtxoView (..), localTxs)
-import           Pos.Types                   (Address, Coin, Tx, TxAux, TxId, Utxo,
-                                              evalUtxoStateT, prevBlockL, runUtxoStateT,
-                                              sumCoins, toPair, txOutValue)
+import           Pos.Types                   (Address, Coin, SlotId, Tx, TxAux, TxId,
+                                              Utxo, evalUtxoStateT, prevBlockL,
+                                              runUtxoStateT, sumCoins, toPair, txOutValue)
 import           Pos.Types.Coin              (unsafeIntegerToCoin)
 import           Pos.Types.Utxo.Functions    (belongsTo, filterUtxoByAddr)
 import           Pos.Update                  (USHolder (..))
@@ -95,12 +95,12 @@ instance (MonadDB ssc m, MonadMask m) => MonadBalances (Modern.TxpLDHolder ssc m
 -- | A class which have methods to get transaction history
 class Monad m => MonadTxHistory m where
     getTxHistory :: Address -> m [(TxId, Tx, Bool)]
-    saveTx :: (TxId, TxAux) -> m ()
+    saveTx :: (TxId, (SlotId, TxAux)) -> m ()
 
     default getTxHistory :: (MonadTrans t, MonadTxHistory m', t m' ~ m) => Address -> m [(TxId, Tx, Bool)]
     getTxHistory = lift . getTxHistory
 
-    default saveTx :: (MonadTrans t, MonadTxHistory m', t m' ~ m) => (TxId, TxAux) -> m ()
+    default saveTx :: (MonadTrans t, MonadTxHistory m', t m' ~ m) => (TxId, (SlotId, TxAux)) -> m ()
     saveTx = lift . saveTx
 
 instance MonadTxHistory m => MonadTxHistory (ReaderT r m)
@@ -129,7 +129,7 @@ instance MonadIO m => MonadTxHistory (WalletDB m) where
 -- TODO: make a working instance
 instance (Ssc ssc, MonadDB ssc m, MonadThrow m, WithLogger m)
          => MonadTxHistory (Modern.TxpLDHolder ssc m) where
-    getTxHistory addr = do
+    getTxHistory addr = undefined {- do
         bot <- GS.getBot
         tip <- GS.getTip
         genUtxo <- filterUtxoByAddr addr <$> GS.getGenUtxo
@@ -149,7 +149,8 @@ instance (Ssc ssc, MonadDB ssc m, MonadThrow m, WithLogger m)
                        maybeThrow (DBMalformed "A block mysteriously disappeared!")
                 deriveAddrHistoryPartial txs addr [blk]
             localFetcher blkTxs = do
-                let mp (txid, (tx, txw, txd)) = (WithHash tx txid, txw, txd)
+                let mp (txid, (_, (tx, txw, txd))) =
+                        (WithHash tx txid, txw, txd)
                 ltxs <- HM.toList . localTxs <$> lift (lift getMemPool)
                 txs <- getRelatedTxs addr $ map mp ltxs
                 return $ txs ++ blkTxs
@@ -157,6 +158,8 @@ instance (Ssc ssc, MonadDB ssc m, MonadThrow m, WithLogger m)
         result <- runMaybeT $
             evalUtxoStateT (foldrM blockFetcher [] hashList >>= localFetcher) genUtxo
         maybe (panic "deriveAddrHistory: Nothing") return result
+
+-}
 
     saveTx txw = () <$ processTx txw
 
