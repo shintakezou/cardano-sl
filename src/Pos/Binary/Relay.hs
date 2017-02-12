@@ -26,8 +26,10 @@ instance (Bi tag, Bi key) => Bi (ReqMsg key tag) where
     get = liftM2 ReqMsg get get
 
 instance (Bi tag) => Bi (MempoolMsg tag) where
-    put MempoolMsg {..} = put mmTag
-    get = liftM MempoolMsg get
+    put MempoolMsg {..} = put (13832 :: Int32) >> put mmTag
+    get = do x <- get
+             unless (x == (13832 :: Int32)) $ fail "wrong MempoolMsg"
+             MempoolMsg <$> get
 
 instance (Bi tag, Bi key) => Bi (MempoolInvMsg key tag) where
     put MempoolInvMsg {..} = put mimTag >> put mimKeys
