@@ -22,6 +22,7 @@ import           Pos.Binary.Communication    ()
 import           Pos.Binary.Relay            ()
 import           Pos.Communication.BiP       (BiP (..))
 import           Pos.Crypto                  (hash)
+import           Pos.Slotting                (getCurrentSlot)
 import           Pos.Statistics              (StatProcessTx (..), statlogCountEvent)
 import           Pos.Txp.Class               (getMemPool)
 import           Pos.Txp.Logic               (processTx)
@@ -92,7 +93,7 @@ instance ( WorkMode ssc m
 
     handleReq _ txId = fmap toContents . HM.lookup txId . localTxs <$> getMemPool
       where
-        toContents (tx, tw, td) = TxMsgContents tx tw td
+        toContents (_, (tx, tw, td)) = TxMsgContents tx tw td
 
     handleMempool _ = HM.keys . localTxs <$> getMemPool
 
@@ -105,7 +106,8 @@ handleTxDo
     :: WorkMode ssc m
     => (TxId, TxAux) -> m Bool
 handleTxDo tx = do
-    res <- processTx tx
+    sid <- getCurrentSlot
+    res <- processTx (fst tx, (sid, snd tx))
     let txId = fst tx
     case res of
         PTRadded -> do

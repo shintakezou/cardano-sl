@@ -14,7 +14,7 @@ import qualified Data.Text           as T
 import           Universum
 
 import           Pos.DB.Types        (DB)
-import           Pos.Types           (TxAux, TxId, TxIn, TxOutAux)
+import           Pos.Types           (SlotId, TxAux, TxId, TxIn, TxOutAux)
 
 
 data UtxoView ssc = UtxoView
@@ -23,7 +23,7 @@ data UtxoView ssc = UtxoView
     , utxoDB  :: !(DB ssc)
     }
 
-type TxMap = HashMap TxId TxAux
+type TxMap = HashMap TxId (SlotId, TxAux)
 
 data MemPool = MemPool
     { localTxs     :: !TxMap

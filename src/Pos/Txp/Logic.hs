@@ -153,8 +153,8 @@ txVerifyBlocks newChain = do
 
 -- CHECK: @processTx
 -- #processTxDo
-processTx :: MinTxpWorkMode ssc m => (TxId, TxAux) -> m ProcessTxRes
-processTx itw@(txId, (tx, _, _)) = do
+processTx :: MinTxpWorkMode ssc m => (TxId, (SlotId, TxAux)) -> m ProcessTxRes
+processTx itw@(txId, (_, (tx, _, _))) = do
     tipBefore <- getTip
     resolved <-
       foldM (\s inp -> maybe s (\x -> HM.insert inp x s) <$> utxoGet inp)
@@ -172,8 +172,8 @@ processTx itw@(txId, (tx, _, _)) = do
 -- CHECK: @processTxDo
 -- #verifyTxPure
 processTxDo :: TxpLD ssc -> HM.HashMap TxIn TxOutAux -> DB ssc
-            -> (TxId, TxAux) -> (ProcessTxRes, TxpLD ssc)
-processTxDo ld@(uv, mp, undos, tip) resolvedIns utxoDB (id, (tx, txw, txd))
+            -> (TxId, (SlotId, TxAux)) -> (ProcessTxRes, TxpLD ssc)
+processTxDo ld@(uv, mp, undos, tip) resolvedIns utxoDB (id, (sid, (tx, txw, txd)))
     | HM.member id locTxs = (PTRknown, ld)
     | otherwise =
         case verifyRes of
@@ -207,7 +207,7 @@ processTxDo ld@(uv, mp, undos, tip) resolvedIns utxoDB (id, (tx, txw, txd))
             newUndos = HM.insert id (reverse $ foldl' prependToUndo [] (txInputs tx)) oldUndos
         in ( PTRadded
            , ( UtxoView newAddUtxo' newDelUtxo' utxoDB
-             , MemPool (HM.insert id (tx, txw, txd) oldTxs) (oldSize + 1)
+             , MemPool (HM.insert id (sid, (tx, txw, txd)) oldTxs) (oldSize + 1)
              , newUndos
              , tip))
 
@@ -330,7 +330,7 @@ normalizeTxpLD = do
              (validTxs, newUtxoView) <-
                  runLocalTxpLDHolder (findValid topsorted) emptyUtxoView
              setTxpLD $ newState newUtxoView validTxs undos utxoTip)
-        (topsortTxs (\(i, (t, _, _)) -> WithHash t i) mpTxs)
+        (topsortTxs (\(i, (_, (t, _, _))) -> WithHash t i) mpTxs)
   where
     findValid topsorted = do
         validTxs' <- foldlM canApply [] topsorted
@@ -339,12 +339,12 @@ normalizeTxpLD = do
     newState newUtxoView validTxs undos utxoTip =
         let newTxs = HM.fromList validTxs in
         (newUtxoView, MemPool newTxs (length validTxs), undos, utxoTip)
-    canApply xs itxa@(_, txa) = do
+    canApply xs itxa@(i, (_, txa)) = do
         -- Pure checks are not done here, because they are done
         -- earlier, when we accept transaction.
         verifyRes <- verifyTxUtxo False txa
         case verifyRes of
             Right _ -> do
-                applyTxToUtxo' itxa
+                applyTxToUtxo' (i, txa)
                 return (itxa : xs)
             Left _ -> return xs
