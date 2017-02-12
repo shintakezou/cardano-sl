@@ -259,7 +259,8 @@ handleMempoolL MempoolMsg {..} peerId sendActions = processMessage "Mempool" mmT
     res <- handleMempool mmTag
     case NE.nonEmpty res of
         Nothing -> logDebug $ sformat ("Not replying to "%build) mmTag
-        Just ne -> sendTo sendActions peerId (MempoolInvMsg mmTag ne)
+        Just ne -> do logWarning "Sending mempool"
+                      sendTo sendActions peerId (MempoolInvMsg mmTag ne)
 
 handleDataL
     :: forall ssc m key tag contents.

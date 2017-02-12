@@ -95,7 +95,9 @@ instance ( WorkMode ssc m
       where
         toContents (_, (tx, tw, td)) = TxMsgContents tx tw td
 
-    handleMempool _ = HM.keys . localTxs <$> getMemPool
+    handleMempool _ = do
+        logWarning "handle Tx mempool"
+        HM.keys . localTxs <$> getMemPool
 
     handleData (TxMsgContents tx tw td) _ = handleTxDo (hash tx, (tx, tw, td))
 

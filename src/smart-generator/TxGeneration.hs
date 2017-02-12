@@ -1,3 +1,5 @@
+{-# LANGUAGE BangPatterns #-}
+
 module TxGeneration
        ( BambooPool
        , initTransaction
@@ -143,6 +145,8 @@ ifMajorityHas ms tx = do
     hm <- atomically $ readTVar ms
     let hasHms = HM.filter (HS.member txid) hm
         ratio = fromIntegral (HM.size hasHms) / fromIntegral (HM.size hm)
+    !() <- traceM $ "Checking transaction " <> show txid <>
+                    "; resulting ratio = " <> show ratio
     return $ ratio > 0.5
 
 isValidTx :: WorkMode ssc m => Maybe MempoolStorage -> Tx -> m Bool

@@ -18,7 +18,7 @@ import           Options.Applicative         (execParser)
 import           Serokell.Util.Verify        (VerificationRes (..))
 import           System.FilePath.Posix       ((</>))
 import           System.Random.Shuffle       (shuffleM)
-import           System.Wlog                 (logInfo)
+import           System.Wlog                 (logInfo, logWarning)
 import           Test.QuickCheck             (arbitrary, generate)
 import           Universum                   hiding (forConcurrently)
 
@@ -100,6 +100,7 @@ mempoolPolling :: WorkMode ssc m => SendActions BiP m -> MempoolStorage -> m ()
 mempoolPolling sendActions ms = do
     na <- getPeers 1
     let msg = MempoolMsg TxMsgTag
+    logWarning (sformat ("sending MempoolMsg to "%int%" nodes") (length na))
     forM_ na $ \addr -> sendToNode sendActions addr msg
     delay $ sec 20
 
