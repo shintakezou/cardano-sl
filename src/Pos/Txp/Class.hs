@@ -85,9 +85,9 @@ getLocalTxs = HM.toList . localTxs <$> getMemPool
 getLocalUndo :: MonadTxpLD ssc m => m (HashMap TxId [TxOutAux])
 getLocalUndo = (\(_, _, undos, _) -> undos) <$> getTxpLD
 
-getLocalTxsNUndo :: MonadTxpLD ssc m => m ([(TxId, TxAux)], HashMap TxId [TxOutAux])
+getLocalTxsNUndo :: MonadTxpLD ssc m => m ([(TxId, (SlotId, TxAux))], HashMap TxId [TxOutAux])
 getLocalTxsNUndo =
-    (\(_, mp, undos, _) -> (HM.toList . fmap snd . localTxs $ mp, undos))
+    (\(_, mp, undos, _) -> (HM.toList . localTxs $ mp, undos))
     <$> getTxpLD
 
 getUtxoView :: MonadTxpLD ssc m => m (UtxoView ssc)

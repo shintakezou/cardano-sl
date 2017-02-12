@@ -29,7 +29,7 @@ module Pos.Block.Logic
        , createMainBlock
        ) where
 
-import           Control.Lens              (view, (^.), _1)
+import           Control.Lens              (each, over, view, (^.), _1, _2)
 import           Control.Monad.Catch       (try)
 import           Control.Monad.Except      (ExceptT (ExceptT), runExceptT, throwError)
 import           Control.Monad.Trans.Maybe (MaybeT (MaybeT), runMaybeT)
@@ -586,14 +586,17 @@ createMainBlockFinish slotId pSk prevHeader = do
     (localTxs, txUndo) <- getLocalTxsNUndo @ssc
     sscData <- maybe onNoSsc pure =<< sscGetLocalPayload @ssc slotId
     (localPSKs, pskUndo) <- lift getProxyMempool
-    let convertTx (txId, (tx, _, _)) = WithHash tx txId
+    let convertTx (txId, (_, (tx, _, _))) = WithHash tx txId
     sortedTxs <- maybe onBrokenTopo pure $ topsortTxs convertTx localTxs
+    let oldEnough (_, (sid, _)) =
+            Types.flattenSlotId sid + 5 <= Types.flattenSlotId slotId
+    let cutTxs = over (each._2) snd $ takeWhile oldEnough sortedTxs
     sk <- ncSecretKey <$> getNodeContext
-    let blk = createMainBlockPure prevHeader sortedTxs pSk slotId localPSKs sscData sk
+    let blk = createMainBlockPure prevHeader cutTxs pSk slotId localPSKs sscData sk
     let prependToUndo undos tx =
             fromMaybe (panic "Undo for tx not found")
                       (HM.lookup (fst tx) txUndo) : undos
-    let blockUndo = Undo (reverse $ foldl' prependToUndo [] localTxs) pskUndo
+    let blockUndo = Undo (reverse $ foldl' prependToUndo [] cutTxs) pskUndo
     lift $ inAssertMode $ verifyBlocksPrefix (pure (Right blk)) >>=
         \case Left err -> logError $ sformat ("We've created bad block: "%stext) err
               Right _ -> pass
