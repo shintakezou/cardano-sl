@@ -77,7 +77,7 @@ seedInitTx mms sendActions recipShare bp initTx = do
     delay slotDuration
     -- If next tx is present in utxo, then everything is all right
     tx <- liftIO $ curBambooTx bp 1
-    isVer <- isValidTx mms $ view _1 tx
+    isVer <- isValidTx mms $ view _1 initTx
     if isVer
         then pure ()
         else seedInitTx mms sendActions recipShare bp initTx
