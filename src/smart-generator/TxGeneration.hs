@@ -161,7 +161,8 @@ nextValidTx
     -> m (Either TxAux TxAux)
 nextValidTx bp curTps propThreshold = do
     curTx <- liftIO $ curBambooTx bp 1
-    isVer <- isTxVerified $ view _1 curTx
+    prevTx <- liftIO $ curBambooTx bp 0
+    isVer <- isValidTx mms $ view _1 prevTx
     liftIO $
         if isVer
         then do
