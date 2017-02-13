@@ -14,14 +14,16 @@ import           Control.Concurrent.STM.TBQueue (TBQueue)
 import           Data.List.NonEmpty             (NonEmpty)
 import           Data.Time.Units                (Microsecond)
 import           Node                           (NodeId)
+import qualified STMContainers.Map              as STMMap
 import           Universum
 
 import           Pos.Crypto                     (PublicKey, SecretKey, toPublic)
-import           Pos.Security.CLI             (AttackTarget, AttackType)
+import           Pos.Security.CLI               (AttackTarget, AttackType)
 import           Pos.Ssc.Class.Types            (Ssc (SscNodeContext))
 import           Pos.Types                      (Address, BlockHeader, EpochIndex,
                                                  HeaderHash, SlotId, SlotLeaders,
                                                  Timestamp (..), Utxo, makePubKeyAddress)
+import           Pos.Util.TimeWarp              (NetworkAddress)
 import           Pos.Util.UserSecret            (UserSecret)
 
 ----------------------------------------------------------------------------
@@ -70,6 +72,9 @@ data NodeContext ssc = NodeContext
     , ncNtpLastSlot         :: !(STM.TVar SlotId)
     -- ^ Slot which was returned from getCurrentSlot in last time
     , ncBlockRetrievalQueue :: !(TBQueue (NodeId, NonEmpty (BlockHeader ssc)))
+    , ncPreferredInterfaces :: !(STMMap.Map NetworkAddress Word32)
+    -- ^ Where to send data for each node (currently holds last interface for
+    -- which sending was successful)
     }
 
 -- | Generate 'PublicKey' from 'SecretKey' of 'NodeContext'.

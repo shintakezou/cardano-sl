@@ -38,7 +38,7 @@ import           Control.Monad.Catch           (try)
 import           Pos.Communication.BiP         (BiP)
 import           Pos.Wallet.KeyStorage         (KeyError (..), MonadKeys (..),
                                                 newSecretKey)
-import           Pos.Wallet.Tx                 (submitTx)
+import           Pos.Wallet.Tx                 (submitTx')
 import           Pos.Wallet.WalletMode         (WalletMode, getBalance, getTxHistory)
 import           Pos.Wallet.Web.Api            (WalletApi, walletApi)
 import           Pos.Wallet.Web.ClientTypes    (CAddress, CCurrency (ADA), CProfile,
@@ -232,7 +232,7 @@ sendExtended sendActions srcCAddr dstCAddr c curr title desc = do
     sks <- getSecretKeys
     let sk = sks !! idx
     na <- fmap dhtAddr <$> getKnownPeers
-    etx <- submitTx sendActions sk na [(TxOut dstAddr c, [])]
+    etx <- submitTx' Nothing sendActions sk na [(TxOut dstAddr c, [])]
     case etx of
         Left err -> throwM . Internal $ sformat ("Cannot send transaction: "%stext) err
         Right (tx, _, _) -> do

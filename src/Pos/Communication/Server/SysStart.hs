@@ -22,7 +22,7 @@ import           Pos.Binary.Communication ()
 import           Pos.Binary.DHTModel      ()
 import           Pos.Communication.BiP    (BiP)
 import           Pos.Communication.Types  (SysStartRequest (..), SysStartResponse (..))
-import           Pos.DHT.Model            (sendToNeighbors)
+import           Pos.DHT.Model            (sendToNeighbors')
 import           Pos.Types                (Timestamp)
 import           Pos.WorkMode             (MinWorkMode)
 
@@ -39,14 +39,17 @@ sysStartReqListener sysStart = ListenerActionConversation $
             send conv $ SysStartResponse sysStart
 
 -- | Listener for 'SysStartResponce' message.
-sysStartRespListener :: MinWorkMode m => MVar Timestamp -> Listener BiP m
+sysStartRespListener
+    :: MinWorkMode m
+    => MVar Timestamp -> Listener BiP m
 sysStartRespListener mvar = ListenerActionOneMsg $ handleSysStartResp mvar
 
 handleSysStartResp
-  :: MinWorkMode m => MVar Timestamp -> NodeId -> SendActions BiP m -> SysStartResponse -> m ()
+    :: MinWorkMode m
+    => MVar Timestamp -> NodeId -> SendActions BiP m -> SysStartResponse -> m ()
 handleSysStartResp mvar peerId sendActions (SysStartResponse sysStart) = do
         logInfo $ sformat
             ("Received sysStart response from "%shown%", "%build)
             peerId sysStart
         whenM (liftIO . tryPutMVar mvar $ sysStart) $
-            sendToNeighbors sendActions $ SysStartResponse sysStart
+            sendToNeighbors' Nothing sendActions $ SysStartResponse sysStart
