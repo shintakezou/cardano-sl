@@ -75,7 +75,7 @@ import           Pos.DB                         (MonadDB (..), getTip, initNodeD
                                                  openNodeDBs, runDBHolder, _gStateDB)
 import           Pos.DB.Misc                    (addProxySecretKey)
 import           Pos.Delegation.Class           (runDelegationT)
-import           Pos.DHT.Model                  (MonadDHT (..), converseToNeighbors)
+import           Pos.DHT.Model                  (MonadDHT (..), converseToNeighbors')
 import           Pos.DHT.Real                   (KademliaDHTInstance,
                                                  KademliaDHTInstanceConfig (..),
                                                  runKademliaDHT, startDHTInstance,
@@ -121,7 +121,7 @@ runTimeSlaveReal sscProxy res bp = do
              runWithRandomIntervals (sec 10) (sec 60) $ liftIO (tryReadMVar mvar) >>= \case
                  Nothing -> do
                     logInfo "Asking neighbors for system start"
-                    converseToNeighbors sendActions $ \peerId conv -> do
+                    converseToNeighbors' Nothing sendActions $ \peerId conv -> do
                         send conv SysStartRequest
                         mResp <- recv conv
                         whenJust mResp $ handleSysStartResp mvar peerId sendActions
@@ -260,6 +260,7 @@ runCH NodeParams {..} sscNodeContext act = do
     -- current time isn't quite validly, but it doesn't matter
     lastSlot <- atomically . newTVar $ unflattenSlotId 0
     queue <- liftIO $ newTBQueueIO blockRetrievalQueueSize
+    preferredInterfaces <- liftIO $ SM.newIO
     let ctx =
             NodeContext
             { ncSystemStart = npSystemStart
@@ -279,6 +280,7 @@ runCH NodeParams {..} sscNodeContext act = do
             , ncNtpData = ntpData
             , ncNtpLastSlot = lastSlot
             , ncBlockRetrievalQueue = queue
+            , ncPreferredInterfaces = preferredInterfaces
             }
     runContextHolder ctx act
 

@@ -20,7 +20,7 @@ import qualified Pos.CLI              as CLI
 import           Pos.Communication    (BiP)
 import           Pos.Constants        (slotDuration)
 import           Pos.Crypto           (SecretKey, createProxySecretKey, toPublic)
-import           Pos.Delegation       (sendProxySKEpoch, sendProxySKSimple)
+import           Pos.Delegation       (sendProxySKEpoch', sendProxySKSimple')
 import           Pos.DHT.Model        (DHTNodeType (..), dhtAddr, discoverPeers)
 import           Pos.Genesis          (genesisPublicKeys, genesisSecretKeys)
 import           Pos.Launcher         (BaseParams (..), LoggingParams (..),
@@ -31,7 +31,7 @@ import           Pos.Ssc.SscAlgo      (SscAlgo (..))
 import           Pos.Types            (EpochIndex (..), coinF, makePubKeyAddress, txaF)
 import           Pos.Util.TimeWarp    (NetworkAddress)
 import           Pos.Wallet           (WalletMode, WalletParams (..), WalletRealMode,
-                                       getBalance, runWalletReal, submitTx)
+                                       getBalance, runWalletReal, submitTx')
 #ifdef WITH_WEB
 import           Pos.Wallet.Web       (walletServeWebLite)
 #endif
@@ -46,7 +46,7 @@ runCmd _ (Balance addr) = lift (getBalance addr) >>=
                          putText . sformat ("Current balance: "%coinF)
 runCmd sendActions (Send idx outputs) = do
     (skeys, na) <- ask
-    etx <- lift $ submitTx sendActions (skeys !! idx) na (map (,[]) outputs) undefined
+    etx <- lift $ submitTx' Nothing sendActions (skeys !! idx) na (map (,[]) outputs) undefined
     case etx of
         Left err -> putText $ sformat ("Error: "%stext) err
         Right tx -> putText $ sformat ("Submitted transaction: "%txaF) tx
@@ -72,14 +72,14 @@ runCmd sendActions (DelegateLight i j) = do
     let issuerSk = genesisSecretKeys !! i
         delegatePk = genesisPublicKeys !! j
     r <- ask
-    sendProxySKEpoch (hoistSendActions lift (`runReaderT` r) sendActions) $
+    sendProxySKEpoch' Nothing (hoistSendActions lift (`runReaderT` r) sendActions) $
         createProxySecretKey issuerSk delegatePk (EpochIndex 0, EpochIndex 50)
     putText "Sent lightweight cert"
 runCmd sendActions (DelegateHeavy i j) = do
     let issuerSk = genesisSecretKeys !! i
         delegatePk = genesisPublicKeys !! j
     r <- ask
-    sendProxySKSimple (hoistSendActions lift (`runReaderT` r) sendActions) $
+    sendProxySKSimple' Nothing (hoistSendActions lift (`runReaderT` r) sendActions) $
         createProxySecretKey issuerSk delegatePk ()
     putText "Sent heavyweight cert"
 runCmd _ Quit = pure ()
