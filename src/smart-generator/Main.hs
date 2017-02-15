@@ -98,16 +98,16 @@ getPeers share = do
 
 mempoolPolling :: WorkMode ssc m => SendActions BiP m -> MempoolStorage -> m ()
 mempoolPolling sendActions ms = forever $ do
+    delay $ sec 10
     na <- getPeers 1
     let msg = MempoolMsg TxMsgTag
-    logWarning (sformat ("sending MempoolMsg to "%int%" nodes") (length na))
+    logWarning $ sformat ("sending MempoolMsg to "%int%" nodes") (length na)
     forM_ na $ \addr -> sendToNode sendActions addr msg
-    delay $ sec 3
 
 mempoolListener :: WorkMode ssc m => MempoolStorage -> Listener BiP m
 mempoolListener ms = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
     let na = fromJust $ nodeIdToAddress peerId
-        txs = NA.toList $ mimKeys mi
+        txs = mimKeys mi
     logWarning $ sformat ("MEMPOOL LISTENER ANSWER: "%int) $ length txs
     addToMpStorage ms na txs
 
@@ -139,7 +139,7 @@ runSmartGen
     -> Production ()
 runSmartGen mms res np@NodeParams{..} sscnp opts@GenOptions{..} =
   runSGMode mms res np sscnp $ \sendActions -> do
-    -- initLrc
+    initLrc
     let getPosixMs = round . (*1000) <$> liftIO getPOSIXTime
         initTx = initTransaction opts
 

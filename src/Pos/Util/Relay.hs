@@ -174,7 +174,7 @@ instance (NamedMessagePart tag) =>
 
 data MempoolInvMsg key tag = MempoolInvMsg
     { mimTag  :: !tag
-    , mimKeys :: !(NonEmpty key)
+    , mimKeys :: ![key]
     } deriving (Show, Eq)
 
 instance (Arbitrary key, Arbitrary tag) => Arbitrary (MempoolInvMsg key tag) where
@@ -257,10 +257,8 @@ handleMempoolL
     -> m ()
 handleMempoolL MempoolMsg {..} peerId sendActions = processMessage "Mempool" mmTag verifyMempoolTag $ do
     res <- handleMempool mmTag
-    case NE.nonEmpty res of
-        Nothing -> logDebug $ sformat ("Not replying to "%build) mmTag
-        Just ne -> do logWarning "Sending mempool"
-                      sendTo sendActions peerId (MempoolInvMsg mmTag ne)
+    logWarning $ sformat ("Sending mempool with "%build%" items") (length res)
+    sendTo sendActions peerId (MempoolInvMsg mmTag res)
 
 handleDataL
     :: forall ssc m key tag contents.

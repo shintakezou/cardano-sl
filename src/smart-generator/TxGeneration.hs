@@ -150,7 +150,7 @@ ifMajorityHas ms tx = do
     let hasHms = HM.filter (HS.member txid) hm
         ratio = fromIntegral (HM.size hasHms) / fromIntegral (HM.size hm)
     !() <- traceM $ "Checking transaction " <> show txid <>
-                    "; resulting ratio = " <> show ratio
+                    "; availability = " <> show (HM.size hasHms, HM.size hm)
     return $ ratio > 0.5
 
 isValidTx :: WorkMode ssc m => Maybe MempoolStorage -> Tx -> m Bool
