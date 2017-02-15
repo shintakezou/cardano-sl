@@ -8,6 +8,7 @@ module Pos.Txp.Class
        , getLocalTxs
        , getLocalUndo
        , getLocalTxsNUndo
+       , trimLocalTxs
        , getUtxoView
        , getMemPool
        ) where
@@ -20,8 +21,9 @@ import qualified Data.HashMap.Strict    as HM
 import           Universum
 
 import           Pos.DHT.Real           (KademliaDHT)
-import           Pos.Txp.Types.Types    (MemPool (localTxs), UtxoView)
-import           Pos.Types              (HeaderHash, SlotId, TxAux, TxId, TxOutAux)
+import           Pos.Txp.Types.Types    (MemPool (..), UtxoView)
+import           Pos.Types              (HeaderHash, SlotId, TxAux, TxId, TxOutAux,
+                                         flattenSlotId)
 
 -- | LocalData of transactions processing.
 -- There are two invariants which must hold for local data
@@ -89,6 +91,15 @@ getLocalTxsNUndo :: MonadTxpLD ssc m => m ([(TxId, (SlotId, TxAux))], HashMap Tx
 getLocalTxsNUndo =
     (\(_, mp, undos, _) -> (HM.toList . localTxs $ mp, undos))
     <$> getTxpLD
+
+trimLocalTxs :: MonadTxpLD ssc m => SlotId -> Word64 -> m (IO ())
+trimLocalTxs slotId age = do
+    TxpLDWrap {..} <- getTxpLDWrap
+    return $ STM.atomically $ STM.modifyTVar' memPool $ \mp ->
+        let txs' = HM.filter (\(sid, _) -> flattenSlotId slotId - flattenSlotId sid <= age) (localTxs mp)
+        in  traceShow ("TRIMMING" :: Text, localTxsSize mp, length txs',
+                       "OLDEST IS" :: Text, if null (localTxs mp) then "-" else show (minimum (map fst (localTxs mp)))) $
+              mp {localTxs = txs', localTxsSize = length txs'}
 
 getUtxoView :: MonadTxpLD ssc m => m (UtxoView ssc)
 getUtxoView = (\(uv, _, _, _) -> uv) <$> getTxpLD

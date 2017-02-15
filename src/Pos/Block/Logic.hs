@@ -43,7 +43,7 @@ import           Serokell.Util.Text        (listJson)
 import           Serokell.Util.Verify      (VerificationRes (..), formatAllErrors,
                                             isVerSuccess, verResToMonadError)
 import           System.Wlog               (CanLog, HasLoggerName, logDebug, logError,
-                                            logInfo)
+                                            logInfo, logWarning)
 import           Universum
 
 import           Pos.Block.Logic.Internal  (applyBlocksUnsafe, rollbackBlocksUnsafe,
@@ -586,23 +586,14 @@ createMainBlockFinish slotId pSk prevHeader = do
     (localTxs, txUndo) <- getLocalTxsNUndo @ssc
     sscData <- maybe onNoSsc pure =<< sscGetLocalPayload @ssc slotId
     (localPSKs, pskUndo) <- lift getProxyMempool
-    let convertTx (txId, (_, (tx, _, _))) = WithHash tx txId
-    sortedTxs <- maybe onBrokenTopo pure $ topsortTxs convertTx localTxs
-    let oldEnough (_, (sid, _)) =
-            Types.flattenSlotId sid + 5 <= Types.flattenSlotId slotId
-    let cutTxs = over (each._2) snd $ takeWhile oldEnough sortedTxs
     sk <- ncSecretKey <$> getNodeContext
-    let blk = createMainBlockPure prevHeader cutTxs pSk slotId localPSKs sscData sk
-    let prependToUndo undos tx =
-            fromMaybe (panic "Undo for tx not found")
-                      (HM.lookup (fst tx) txUndo) : undos
-    let blockUndo = Undo (reverse $ foldl' prependToUndo [] cutTxs) pskUndo
+    let blk = createMainBlockPure prevHeader [] pSk slotId localPSKs sscData sk
+    let blockUndo = Undo [] pskUndo
     lift $ inAssertMode $ verifyBlocksPrefix (pure (Right blk)) >>=
         \case Left err -> logError $ sformat ("We've created bad block: "%stext) err
               Right _ -> pass
     lift $ blk <$ applyBlocksUnsafe (pure (Right blk, blockUndo))
   where
-    onBrokenTopo = throwError "Topology of local transactions is broken!"
     onNoSsc = throwError "can't obtain SSC payload to create block"
 
 createMainBlockPure

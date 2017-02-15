@@ -33,6 +33,7 @@ import           Pos.DB.Misc                 (getProxySecretKeys)
 import           Pos.Slotting                (MonadSlots (getCurrentTime), getSlotStart,
                                               onNewSlot)
 import           Pos.Ssc.Class               (SscHelpersClass, SscWorkersClass)
+import           Pos.Txp.Class               (trimLocalTxs)
 import           Pos.Types                   (MainBlock, ProxySKEither, SlotId (..),
                                               Timestamp (Timestamp),
                                               VerifyBlockParams (..), gbHeader, slotIdF,
@@ -49,6 +50,9 @@ blkWorkers = [onNewSlot True . blkOnNewSlot, retrievalWorker]
 -- Action which should be done when new slot starts.
 blkOnNewSlot :: WorkMode ssc m => SendActions BiP m -> SlotId -> m ()
 blkOnNewSlot sendActions slotId@SlotId {..} = do
+    -- delete extra transactions
+    liftIO =<< trimLocalTxs slotId 20
+
     -- First of all we create genesis block if necessary.
     mGenBlock <- createGenesisBlock siEpoch
     whenJust mGenBlock $ \createdBlk -> do
