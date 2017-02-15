@@ -13,7 +13,7 @@ module Pos.Txp.Listeners
 
 import qualified Data.HashMap.Strict         as HM
 import           Formatting                  (build, sformat, stext, (%))
-import           Node                        (ListenerAction (..))
+import           Node                        (ListenerAction (..), recv)
 import           Serokell.Util.Verify        (VerificationRes (..))
 import           System.Wlog                 (WithLogger, logDebug, logInfo, logWarning)
 import           Universum
@@ -66,8 +66,9 @@ handleDataTx = ListenerActionOneMsg $ \peerId sendActions (d :: DataMsg TxId TxM
 handleMempoolTx
     :: WorkMode ssc m
     => ListenerAction BiP m
-handleMempoolTx = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg TxMsgTag) ->
-    handleMempoolL m peerId sendActions
+handleMempoolTx = ListenerActionConversation $ \peerId conv -> do
+    mm :: Maybe (MempoolMsg TxMsgTag) <- recv conv
+    whenJust mm $ \m -> handleMempoolL m peerId conv
 
 txStubListeners
     :: WithLogger m

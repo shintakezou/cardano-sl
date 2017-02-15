@@ -7,7 +7,7 @@ module Pos.Update.Listeners
        ( usListeners
        ) where
 
-import           Node                     (ListenerAction (..))
+import           Node                     (ListenerAction (..), recv)
 import           Serokell.Util.Verify     (VerificationRes (..))
 import           Universum
 
@@ -40,8 +40,9 @@ handleReqProposal = ListenerActionOneMsg $ \peerId sendActions (i :: ReqMsg UpId
     handleReqL i peerId sendActions
 
 handleMempoolProposal :: WorkMode ssc m => ListenerAction BiP m
-handleMempoolProposal = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg ProposalMsgTag) ->
-    handleMempoolL m peerId sendActions
+handleMempoolProposal = ListenerActionConversation $ \peerId conv -> do
+    mm :: Maybe (MempoolMsg ProposalMsgTag) <- recv conv
+    whenJust mm $ \m -> handleMempoolL m peerId conv
 
 handleDataProposal :: WorkMode ssc m => ListenerAction BiP m
 handleDataProposal = ListenerActionOneMsg $ \peerId sendActions (i :: DataMsg UpId UpdateProposal) ->

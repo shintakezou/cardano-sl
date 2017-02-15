@@ -22,7 +22,9 @@ import           Data.List.NonEmpty               (NonEmpty (..))
 import qualified Data.List.NonEmpty               as NE
 import           Data.Proxy                       (Proxy (..))
 import           Formatting                       (build, sformat, stext, (%))
-import           Node                             (NodeId (..), SendActions (..), sendTo)
+import           Node                             (ConversationActions (..),
+                                                   ListenerAction (..), NodeId (..),
+                                                   SendActions (..), send, sendTo)
 import           Node.Message                     (Message (..), MessageName (..))
 import           Serokell.Util.Text               (listJson)
 import           Serokell.Util.Verify             (VerificationRes (..))
@@ -253,12 +255,12 @@ handleMempoolL
        )
     => MempoolMsg tag
     -> NodeId
-    -> SendActions BiP m
+    -> ConversationActions (MempoolInvMsg key tag) (MempoolMsg tag) m
     -> m ()
-handleMempoolL MempoolMsg {..} peerId sendActions = processMessage "Mempool" mmTag verifyMempoolTag $ do
+handleMempoolL MempoolMsg {..} peerId conv = processMessage "Mempool" mmTag verifyMempoolTag $ do
     res <- handleMempool mmTag
     logWarning $ sformat ("Sending mempool with "%build%" items") (length res)
-    sendTo sendActions peerId (MempoolInvMsg mmTag res)
+    send conv $ MempoolInvMsg mmTag res
 
 handleDataL
     :: forall ssc m key tag contents.

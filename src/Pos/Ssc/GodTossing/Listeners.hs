@@ -17,7 +17,7 @@ import           System.Wlog                            (logDebug)
 import           Universum
 
 import           Data.Proxy                             (Proxy (..))
-import           Node                                   (ListenerAction (..))
+import           Node                                   (ListenerAction (..), recv)
 import           Pos.Binary.Crypto                      ()
 import           Pos.Binary.Relay                       ()
 import           Pos.Binary.Ssc                         ()
@@ -78,8 +78,9 @@ handleReqGt = ListenerActionOneMsg $ \peerId sendActions (r :: ReqMsg Stakeholde
 handleMempoolGt
     :: WorkMode SscGodTossing m
     => ListenerAction BiP m
-handleMempoolGt = ListenerActionOneMsg $ \peerId sendActions (m :: MempoolMsg GtMsgTag) ->
-    handleMempoolL m peerId sendActions
+handleMempoolGt = ListenerActionConversation $ \peerId conv -> do
+    mm :: Maybe (MempoolMsg GtMsgTag) <- recv conv
+    whenJust mm $ \m -> handleMempoolL m peerId conv
 
 handleDataGt
     :: WorkMode SscGodTossing m

@@ -10,10 +10,11 @@ import           Data.Maybe                  (fromJust, fromMaybe)
 import           Data.Proxy                  (Proxy (..))
 import           Data.Time.Clock.POSIX       (getPOSIXTime)
 import           Data.Time.Units             (Microsecond)
-import           Formatting                  (float, int, sformat, (%))
+import           Formatting                  (build, float, int, sformat, shown, (%))
 import           Mockable                    (Production, delay, forConcurrently, fork)
 import           Node                        (Listener, ListenerAction (..), SendActions,
-                                              hoistListenerAction, hoistSendActions)
+                                              hoistListenerAction, hoistSendActions, recv,
+                                              send)
 import           Options.Applicative         (execParser)
 import           Serokell.Util.Verify        (VerificationRes (..))
 import           System.FilePath.Posix       ((</>))
@@ -27,9 +28,9 @@ import           Pos.Communication           (BiP, allListeners)
 import           Pos.Constants               (genesisN, neighborsSendThreshold,
                                               slotDuration, slotSecurityParam)
 import           Pos.Crypto                  (KeyPair (..), hash)
-import           Pos.DHT.Model               (DHTNodeType (..), MonadDHT, dhtAddr,
-                                              discoverPeers, getKnownPeers,
-                                              nodeIdToAddress, sendToNode)
+import           Pos.DHT.Model               (DHTNodeType (..), MonadDHT,
+                                              converseToNeighbors, dhtAddr, discoverPeers,
+                                              getKnownPeers, nodeIdToAddress, sendToNode)
 import           Pos.Genesis                 (genesisUtxo)
 import           Pos.Launcher                (BaseParams (..), LoggingParams (..),
                                               NodeParams (..), RealModeResources,
@@ -99,17 +100,19 @@ getPeers share = do
 mempoolPolling :: WorkMode ssc m => SendActions BiP m -> MempoolStorage -> m ()
 mempoolPolling sendActions ms = forever $ do
     delay $ sec 10
-    na <- getPeers 1
-    let msg = MempoolMsg TxMsgTag
-    logWarning $ sformat ("sending MempoolMsg to "%int%" nodes") (length na)
-    forM_ na $ \addr -> sendToNode sendActions addr msg
-
-mempoolListener :: WorkMode ssc m => MempoolStorage -> Listener BiP m
-mempoolListener ms = ListenerActionOneMsg $ \peerId sendActions (mi :: MempoolInvMsg TxId TxMsgTag) -> do
-    let na = fromJust $ nodeIdToAddress peerId
-        txs = mimKeys mi
-    logWarning $ sformat ("MEMPOOL LISTENER ANSWER: "%int) $ length txs
-    addToMpStorage ms na txs
+    logWarning "sending MempoolMsg"
+    converseToNeighbors sendActions $ \peerId conv -> do
+        send conv (MempoolMsg TxMsgTag)
+        mResp <- recv conv
+        let Just na = nodeIdToAddress peerId
+        case mResp :: Maybe (MempoolInvMsg TxId TxMsgTag) of
+            Nothing -> logWarning $ sformat
+                ("didn't get a response to MempoolMsg from "%shown) peerId
+            Just (MempoolInvMsg _ txs) -> do
+                logWarning $ sformat
+                    ("MEMPOOL ANSWER from "%shown%": "%int%" txs")
+                    peerId (length txs)
+                addToMpStorage ms na txs
 
 runSGMode
     :: forall ssc a .
@@ -124,10 +127,7 @@ runSGMode mms res np@NodeParams {..} sscnp action =
     runRawRealMode res np sscnp listeners $
     \sendActions -> getNoStatsT . action $ hoistSendActions lift getNoStatsT sendActions
   where
-    listeners = hoistListenerAction getNoStatsT lift <$> allListeners ++ mempoolLs
-    mempoolLs = case mms of
-        Nothing -> []
-        Just ms -> [mempoolListener ms]
+    listeners = hoistListenerAction getNoStatsT lift <$> allListeners
 
 runSmartGen
     :: forall ssc . SscConstraint ssc
