@@ -25,7 +25,9 @@ import           Pos.Context                 (getNodeContext, getUptime, isRecov
 import           Pos.Crypto                  (PublicKey)
 import           Pos.DB                      (DBError (DBMalformed), getBlockHeader,
                                               getTipBlockHeader, loadBlundsFromTipByDepth)
+import           Pos.DB.Block                (getBlockHeader)
 import           Pos.DB.Class                (MonadDB)
+import           Pos.DB.DB                   (getTipBlockHeader, loadBlundsFromTipByDepth)
 import           Pos.Reporting.Methods       (reportMisbehaviourMasked, reportingFatal)
 import           Pos.Security.Class          (SecurityWorkersClass (..))
 import           Pos.Slotting                (getCurrentSlot, getLastKnownSlotDuration,
