@@ -2,7 +2,7 @@
 {-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module Pos.Types.Script
+module Pos.Core.Script
        ( Script(..)
        , Script_v0
        , ScriptVersion
